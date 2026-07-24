@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Web Awesome Inline SVG Asset test</title>
+    <style>
+        body { background-color: #0a0a0a; color: #fff; font-family: sans-serif; padding: 40px; }
+        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; max-width: 600px; margin-top: 30px; }
+        .icon-card { background-color: #141414; border: 1px solid #222222; padding: 20px; border-radius: 8px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .svg-container { color: #007acc; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; }
+        .svg-container svg { width: 36px; height: 36px; }
+    </style>
+    <script src="icons.js"></script>
+</head>
+<body>
+    <h2>Web Awesome Local SVG Render Verification</h2>
+    <p>Loading offline icons locally from <code>/usr/share/anodyne/ui/web-awesome/</code> (No network dependencies)</p>
+    
+    <div class="grid">
+        <div class="icon-card">
+            <div id="i-drawer" class="svg-container"></div>
+            <span>Drawer</span>
+        </div>
+        <div class="icon-card">
+            <div id="i-calendar" class="svg-container"></div>
+            <span>Calendar</span>
+        </div>
+        <div class="icon-card">
+            <div id="i-wifi" class="svg-container"></div>
+            <span>WiFi</span>
+        </div>
+        <div class="icon-card">
+            <div id="i-battery" class="svg-container"></div>
+            <span>Battery</span>
+        </div>
+        <div class="icon-card">
+            <div id="i-gear" class="svg-container"></div>
+            <span>Gear</span>
+        </div>
+        <div class="icon-card">
+            <div id="i-folder" class="svg-container"></div>
+            <span>Folder</span>
+        </div>
+        <div class="icon-card">
+            <div id="i-terminal" class="svg-container"></div>
+            <span>Terminal</span>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            renderAwesomeIcon("i-drawer", "drawer");
+            renderAwesomeIcon("i-calendar", "calendar");
+            renderAwesomeIcon("i-wifi", "wifi");
+            renderAwesomeIcon("i-battery", "battery");
+            renderAwesomeIcon("i-gear", "gear");
+            renderAwesomeIcon("i-folder", "folder");
+            renderAwesomeIcon("i-terminal", "terminal");
+        });
+    </script>
+</body>
+</html>
