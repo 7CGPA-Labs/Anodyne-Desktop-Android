@@ -69,6 +69,11 @@ class DesktopPresentation(
     private lateinit var spotlightInput: EditText
     private lateinit var spotlightBtn: TextView
 
+    // Floating Virtual Keyboard (Presentation Parity)
+    private lateinit var virtualKeyboardPanel: LinearLayout
+    private var isShiftEnabled = false
+    private val rowViews = mutableListOf<TextView>()
+
     // Presentation Virtual Cursor
     private lateinit var cursorView: ImageView
     private var cursorX = 0f
@@ -295,6 +300,9 @@ class DesktopPresentation(
         // 4. Spotlight Search Overlay
         setupSpotlightSearch()
 
+        // 5. Virtual Keyboard (Presentation Parity)
+        setupVirtualKeyboard()
+
         setContentView(workspaceContainer)
 
         // Default to Home tab
@@ -348,8 +356,8 @@ class DesktopPresentation(
                     setPadding(dpToPx(16), dpToPx(6), dpToPx(24), dpToPx(6))
                     gravity = Gravity.CENTER_VERTICAL
                     val hoverBg = android.graphics.drawable.StateListDrawable().apply {
-                        addState(intArrayOf(android.R.attr.state_pressed), android.graphics.drawable.ColorDrawable(Color.parseColor("#3584e4")))
                         addState(intArrayOf(android.R.attr.state_focused), android.graphics.drawable.ColorDrawable(Color.parseColor("#3584e4")))
+                        addState(intArrayOf(android.R.attr.state_pressed), android.graphics.drawable.ColorDrawable(Color.parseColor("#3584e4")))
                         addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
                     }
                     background = hoverBg
@@ -657,12 +665,6 @@ class DesktopPresentation(
                     val width = metrics.widthPixels
 
                     val targetWidth = if (width >= 1920) 1920 else 1280
-                    val uiScale = when {
-                        width >= 3840 -> 2.0
-                        width >= 2560 -> 1.5
-                        width >= 1920 -> 1.0
-                        else -> 0.85
-                    }
 
                     view?.evaluateJavascript(
                         """
@@ -692,6 +694,26 @@ class DesktopPresentation(
                                 sbStyle.innerHTML = '::-webkit-scrollbar { width: 8px !important; height: 8px !important; } ::-webkit-scrollbar-track { background: #0c0c14 !important; } ::-webkit-scrollbar-thumb { background: #475569 !important; border-radius: 4px !important; } ::-webkit-scrollbar-thumb:hover { background: #64748b !important; }';
                                 document.head.appendChild(sbStyle);
                             }
+                            
+                            // Focus state detection for virtual keyboard integration (presentation parity)
+                            if (window.hasKeyboardListener) return;
+                            window.hasKeyboardListener = true;
+                            document.addEventListener('focusin', function(e) {
+                                var el = e.target;
+                                if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.contentEditable === 'true')) {
+                                    if (window.sysContext && typeof window.sysContext.showFloatingKeyboard === 'function') {
+                                        window.sysContext.showFloatingKeyboard();
+                                    }
+                                }
+                            });
+                            document.addEventListener('focusout', function(e) {
+                                var el = e.target;
+                                if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.contentEditable === 'true')) {
+                                    if (window.sysContext && typeof window.sysContext.hideFloatingKeyboard === 'function') {
+                                        window.sysContext.hideFloatingKeyboard();
+                                    }
+                                }
+                            });
                         })();
                         """.trimIndent(),
                         null
@@ -721,6 +743,12 @@ class DesktopPresentation(
                 newWebView.post {
                     newWebView.evaluateJavascript(js, null)
                 }
+            },
+            showKeyboardCallback = {
+                showVirtualKeyboard()
+            },
+            hideKeyboardCallback = {
+                hideVirtualKeyboard()
             }
         )
         newWebView.addJavascriptInterface(sysContext, "sysContext")
@@ -929,7 +957,7 @@ class DesktopPresentation(
             textSize = 14f
             maxLines = 1
             isSingleLine = true
-            isFocusable = false // Primary input handles editing focus
+            isFocusable = false
         }
         searchPanel.addView(spotlightInput)
         spotlightOverlay.addView(searchPanel)
@@ -937,7 +965,6 @@ class DesktopPresentation(
     }
 
     private fun toggleSpotlightSearch() {
-        // Spotlight triggering is driven by parent activity bindings
     }
 
     fun showSpotlightSearch() {
@@ -947,6 +974,123 @@ class DesktopPresentation(
 
     fun hideSpotlightSearch() {
         spotlightOverlay.visibility = View.GONE
+    }
+
+    // Custom Draggable Virtual Keyboard Setup for secondary screen visual mirror
+    private fun setupVirtualKeyboard() {
+        virtualKeyboardPanel = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
+                dpToPx(420),
+                dpToPx(190)
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
+                bottomMargin = dpToPx(20)
+            }
+            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+            visibility = View.GONE
+            elevation = dpToPx(16).toFloat()
+
+            val bg = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#f912121a"))
+                setStroke(2, Color.parseColor("#3a3a4e"))
+                cornerRadius = dpToPx(12).toFloat()
+            }
+            background = bg
+        }
+
+        val header = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(30)
+            )
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val title = TextView(context).apply {
+            text = "⌨️ Floating Keyboard"
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 11f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        header.addView(title)
+
+        val close = TextView(context).apply {
+            text = " × "
+            setTextColor(Color.parseColor("#ef4444"))
+            textSize = 16f
+            setPadding(dpToPx(6), 0, dpToPx(6), 0)
+        }
+        header.addView(close)
+        virtualKeyboardPanel.addView(header)
+
+        val row1Keys = listOf("Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P")
+        val row2Keys = listOf("A", "S", "D", "F", "G", "H", "J", "K", "L")
+        val row3Keys = listOf("Shift", "Z", "X", "C", "V", "B", "N", "M", "Backspace")
+        val row4Keys = listOf("?123", "Space", "Enter")
+
+        virtualKeyboardPanel.addView(createKeyRow(row1Keys))
+        virtualKeyboardPanel.addView(createKeyRow(row2Keys))
+        virtualKeyboardPanel.addView(createKeyRow(row3Keys))
+        virtualKeyboardPanel.addView(createKeyRow(row4Keys))
+
+        workspaceContainer.addView(virtualKeyboardPanel)
+    }
+
+    private fun createKeyRow(keys: List<String>): LinearLayout {
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(34)
+            ).apply {
+                topMargin = dpToPx(4)
+            }
+        }
+        for (key in keys) {
+            val keyView = TextView(context).apply {
+                text = key
+                setTextColor(Color.WHITE)
+                textSize = 12f
+                gravity = Gravity.CENTER
+                val weight = when(key) {
+                    "Space" -> 4f
+                    "Backspace", "Enter", "Shift", "?123" -> 1.5f
+                    else -> 1f
+                }
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, weight).apply {
+                    leftMargin = dpToPx(3)
+                    rightMargin = dpToPx(3)
+                }
+                val bg = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.parseColor("#2a2a3e"))
+                    cornerRadius = dpToPx(6).toFloat()
+                }
+                background = bg
+                
+                if (key.length == 1 && key[0].isLetter()) {
+                    rowViews.add(this)
+                }
+            }
+            row.addView(keyView)
+        }
+        return row
+    }
+
+    fun showVirtualKeyboard() {
+        virtualKeyboardPanel.post {
+            virtualKeyboardPanel.visibility = View.VISIBLE
+            virtualKeyboardPanel.x = (workspaceContainer.width - virtualKeyboardPanel.width) / 2f
+            virtualKeyboardPanel.y = workspaceContainer.height - virtualKeyboardPanel.height - dpToPx(20).toFloat()
+        }
+    }
+
+    fun hideVirtualKeyboard() {
+        virtualKeyboardPanel.post {
+            virtualKeyboardPanel.visibility = View.GONE
+        }
     }
 
     override fun onStop() {

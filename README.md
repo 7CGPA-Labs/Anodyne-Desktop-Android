@@ -22,6 +22,6 @@ This repository contains the source code for **Anodyne Desktop**, a web-first de
 
 ## Architecture Setup
 
-- **Frontend**: A Momentum-style dashboard and local PWAs bundle located in `web-assets/` and synchronized to `app/src/main/assets/`.
+- **Frontend**: A Momentum-style dashboard and local PWAs bundle located in `app/src/main/assets/`.
 - **Bridge**: A custom Kotlin bridge class `AndroidSysContext` attached as `sysContext` inside the WebViews, mapping system metrics and tab routing.
 - **Secondary Display**: Dynamic monitors auto-resolution detection and `DesktopPresentation` layouts via Android's `DisplayManager`.

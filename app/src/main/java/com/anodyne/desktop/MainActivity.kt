@@ -68,6 +68,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var spotlightInput: EditText
     private lateinit var spotlightBtn: TextView
 
+    // Floating Virtual Keyboard
+    private lateinit var virtualKeyboardPanel: LinearLayout
+    private var isShiftEnabled = false
+    private val rowViews = mutableListOf<TextView>()
+
     // Cursor & Touchpad UI elements (Covering the entire screen)
     private lateinit var touchpadOverlay: TouchpadLayout
     private lateinit var cursorView: ImageView
@@ -239,6 +244,24 @@ class MainActivity : AppCompatActivity() {
         }
         topBar.addView(modeToggle)
 
+        // Manual Floating Virtual Keyboard Toggle
+        val keyboardToggle = TextView(this).apply {
+            text = "⌨️"
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 11f
+            setPadding(dpToPx(8), 0, dpToPx(4), 0)
+            setOnClickListener {
+                if (virtualKeyboardPanel.visibility == View.VISIBLE) {
+                    hideVirtualKeyboard()
+                    presentation?.hideVirtualKeyboard()
+                } else {
+                    showVirtualKeyboard()
+                    presentation?.showVirtualKeyboard()
+                }
+            }
+        }
+        topBar.addView(keyboardToggle)
+
         // macOS Spotlight Button
         spotlightBtn = TextView(this).apply {
             text = "🔍"
@@ -366,6 +389,9 @@ class MainActivity : AppCompatActivity() {
 
         // 5. Spotlight Search overlay
         setupSpotlightSearch()
+
+        // 6. Miniature Draggable Keyboard Overlay
+        setupVirtualKeyboard()
 
         setContentView(workspaceContainer)
 
@@ -539,7 +565,7 @@ class MainActivity : AppCompatActivity() {
     private fun showAnodyneDropdown() {
         showMacMenu(anodyneMenu, listOf(
             MacMenuItem("Toggle Pointer Mode") { 
-                val modeBtn = topBar.getChildAt(topBar.childCount - 5) as? TextView
+                val modeBtn = topBar.getChildAt(topBar.childCount - 6) as? TextView
                 modeBtn?.let { toggleInputModeText(it) }
             },
             MacMenuItem(isSeparator = true),
@@ -817,6 +843,26 @@ class MainActivity : AppCompatActivity() {
                                 sbStyle.innerHTML = '::-webkit-scrollbar { width: 8px !important; height: 8px !important; } ::-webkit-scrollbar-track { background: #0c0c14 !important; } ::-webkit-scrollbar-thumb { background: #475569 !important; border-radius: 4px !important; } ::-webkit-scrollbar-thumb:hover { background: #64748b !important; }';
                                 document.head.appendChild(sbStyle);
                             }
+                            
+                            // Focus state detection for virtual keyboard integration
+                            if (window.hasKeyboardListener) return;
+                            window.hasKeyboardListener = true;
+                            document.addEventListener('focusin', function(e) {
+                                var el = e.target;
+                                if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.contentEditable === 'true')) {
+                                    if (window.sysContext && typeof window.sysContext.showFloatingKeyboard === 'function') {
+                                        window.sysContext.showFloatingKeyboard();
+                                    }
+                                }
+                            });
+                            document.addEventListener('focusout', function(e) {
+                                var el = e.target;
+                                if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.contentEditable === 'true')) {
+                                    if (window.sysContext && typeof window.sysContext.hideFloatingKeyboard === 'function') {
+                                        window.sysContext.hideFloatingKeyboard();
+                                    }
+                                }
+                            });
                         })();
                         """.trimIndent(),
                         null
@@ -846,6 +892,14 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     newWebView.evaluateJavascript(js, null)
                 }
+            },
+            showKeyboardCallback = {
+                showVirtualKeyboard()
+                presentation?.showVirtualKeyboard()
+            },
+            hideKeyboardCallback = {
+                hideVirtualKeyboard()
+                presentation?.hideVirtualKeyboard()
             }
         )
         newWebView.addJavascriptInterface(sysContext, "sysContext")
@@ -1137,6 +1191,248 @@ class MainActivity : AppCompatActivity() {
         imm.hideSoftInputFromWindow(spotlightInput.windowToken, 0)
     }
 
+    // Custom Draggable Virtual Keyboard Setup
+    private fun setupVirtualKeyboard() {
+        virtualKeyboardPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
+                dpToPx(420),
+                dpToPx(190)
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
+                bottomMargin = dpToPx(20)
+            }
+            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+            visibility = View.GONE
+            elevation = dpToPx(16).toFloat()
+
+            val bg = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#f912121a"))
+                setStroke(2, Color.parseColor("#3a3a4e"))
+                cornerRadius = dpToPx(12).toFloat()
+            }
+            background = bg
+        }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(30)
+            )
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val title = TextView(this).apply {
+            text = "⌨️ Floating Keyboard"
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 11f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        header.addView(title)
+
+        val close = TextView(this).apply {
+            text = " × "
+            setTextColor(Color.parseColor("#ef4444"))
+            textSize = 16f
+            setPadding(dpToPx(6), 0, dpToPx(6), 0)
+            setOnClickListener {
+                hideVirtualKeyboard()
+                presentation?.hideVirtualKeyboard()
+            }
+        }
+        header.addView(close)
+
+        virtualKeyboardPanel.addView(header)
+
+        var dX = 0f
+        var dY = 0f
+        header.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    dX = virtualKeyboardPanel.x - event.rawX
+                    dY = virtualKeyboardPanel.y - event.rawY
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    virtualKeyboardPanel.x = event.rawX + dX
+                    virtualKeyboardPanel.y = event.rawY + dY
+                }
+            }
+            true
+        }
+
+        val row1Keys = listOf("Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P")
+        val row2Keys = listOf("A", "S", "D", "F", "G", "H", "J", "K", "L")
+        val row3Keys = listOf("Shift", "Z", "X", "C", "V", "B", "N", "M", "Backspace")
+        val row4Keys = listOf("?123", "Space", "Enter")
+
+        virtualKeyboardPanel.addView(createKeyRow(row1Keys))
+        virtualKeyboardPanel.addView(createKeyRow(row2Keys))
+        virtualKeyboardPanel.addView(createKeyRow(row3Keys))
+        virtualKeyboardPanel.addView(createKeyRow(row4Keys))
+
+        workspaceContainer.addView(virtualKeyboardPanel)
+    }
+
+    private fun createKeyRow(keys: List<String>): LinearLayout {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(34)
+            ).apply {
+                topMargin = dpToPx(4)
+            }
+        }
+        for (key in keys) {
+            val keyView = TextView(this).apply {
+                text = key
+                setTextColor(Color.WHITE)
+                textSize = 12f
+                gravity = Gravity.CENTER
+                val weight = when(key) {
+                    "Space" -> 4f
+                    "Backspace", "Enter", "Shift", "?123" -> 1.5f
+                    else -> 1f
+                }
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, weight).apply {
+                    leftMargin = dpToPx(3)
+                    rightMargin = dpToPx(3)
+                }
+                val bg = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.parseColor("#2a2a3e"))
+                    cornerRadius = dpToPx(6).toFloat()
+                }
+                background = bg
+                
+                if (key.length == 1 && key[0].isLetter()) {
+                    rowViews.add(this)
+                }
+
+                setOnClickListener {
+                    onVirtualKeyClick(key)
+                }
+            }
+            row.addView(keyView)
+        }
+        return row
+    }
+
+    private fun onVirtualKeyClick(key: String) {
+        if (key == "Shift") {
+            isShiftEnabled = !isShiftEnabled
+            for (tv in rowViews) {
+                val txt = tv.text.toString()
+                tv.text = if (isShiftEnabled) txt.uppercase() else txt.lowercase()
+            }
+            return
+        }
+
+        if (spotlightOverlay.visibility == View.VISIBLE) {
+            when (key) {
+                "Backspace" -> {
+                    val str = spotlightInput.text.toString()
+                    if (str.isNotEmpty()) {
+                        spotlightInput.setText(str.substring(0, str.length - 1))
+                        spotlightInput.setSelection(spotlightInput.text.length)
+                    }
+                }
+                "Space" -> {
+                    spotlightInput.append(" ")
+                }
+                "Enter" -> {
+                    val query = spotlightInput.text.toString()
+                    if (query.trim().isNotEmpty()) {
+                        triggerSpotlightSearch(query)
+                        hideSpotlightSearch()
+                    }
+                }
+                else -> {
+                    if (key != "?123") {
+                        val txt = if (isShiftEnabled) key.uppercase() else key.lowercase()
+                        spotlightInput.append(txt)
+                    }
+                }
+            }
+        } else {
+            val webView = getActiveWebView() ?: return
+            val js = when (key) {
+                "Backspace" -> {
+                    """
+                    (function() {
+                        var el = document.activeElement;
+                        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.contentEditable === 'true')) {
+                            var val = el.value || '';
+                            if (val.length > 0) {
+                                el.value = val.substring(0, val.length - 1);
+                                el.dispatchEvent(new Event('input', { bubbles: true }));
+                            }
+                        }
+                    })();
+                    """.trimIndent()
+                }
+                "Space" -> {
+                    """
+                    (function() {
+                        var el = document.activeElement;
+                        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.contentEditable === 'true')) {
+                            el.value = (el.value || '') + ' ';
+                            el.dispatchEvent(new Event('input', { bubbles: true }));
+                        }
+                    })();
+                    """.trimIndent()
+                }
+                "Enter" -> {
+                    """
+                    (function() {
+                        var el = document.activeElement;
+                        if (el) {
+                            el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                            el.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                            el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                            if (el.form) {
+                                el.form.submit();
+                            }
+                        }
+                    })();
+                    """.trimIndent()
+                }
+                else -> {
+                    if (key != "?123") {
+                        val txt = if (isShiftEnabled) key.uppercase() else key.lowercase()
+                        """
+                        (function() {
+                            var el = document.activeElement;
+                            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.contentEditable === 'true')) {
+                                el.value = (el.value || '') + '$txt';
+                                el.dispatchEvent(new Event('input', { bubbles: true }));
+                            }
+                        })();
+                        """.trimIndent()
+                    } else ""
+                }
+            }
+            if (js.isNotEmpty()) {
+                webView.evaluateJavascript(js, null)
+            }
+        }
+    }
+
+    fun showVirtualKeyboard() {
+        runOnUiThread {
+            virtualKeyboardPanel.visibility = View.VISIBLE
+            virtualKeyboardPanel.x = (workspaceContainer.width - virtualKeyboardPanel.width) / 2f
+            virtualKeyboardPanel.y = workspaceContainer.height - virtualKeyboardPanel.height - dpToPx(20).toFloat()
+        }
+    }
+
+    fun hideVirtualKeyboard() {
+        runOnUiThread {
+            virtualKeyboardPanel.visibility = View.GONE
+        }
+    }
+
     private fun moveVirtualCursor(dx: Float, dy: Float) {
         val maxW = if (workspaceContainer.width > 0) workspaceContainer.width.toFloat() else resources.displayMetrics.widthPixels.toFloat()
         val maxH = if (workspaceContainer.height > 0) workspaceContainer.height.toFloat() else resources.displayMetrics.heightPixels.toFloat()
@@ -1221,13 +1517,6 @@ class MainActivity : AppCompatActivity() {
         webView.scrollBy(0, (-dy).toInt())
     }
 
-    private fun getActiveWebView(): WebView? {
-        if (currentTabIndex in tabsList.indices) {
-            return tabsList[currentTabIndex].webView
-        }
-        return null
-    }
-
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
@@ -1240,6 +1529,13 @@ class MainActivity : AppCompatActivity() {
                     or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
             )
         }
+    }
+
+    private fun getActiveWebView(): WebView? {
+        if (currentTabIndex in tabsList.indices) {
+            return tabsList[currentTabIndex].webView
+        }
+        return null
     }
 
     private fun dpToPx(dp: Int): Int {

@@ -16,7 +16,9 @@ import java.util.Locale
 class AndroidSysContext(
     private val context: Context,
     private val launchTabCallback: (String, String, String) -> Unit = { _, _, _ -> },
-    private val evaluateJs: (String) -> Unit = {}
+    private val evaluateJs: (String) -> Unit = {},
+    private val showKeyboardCallback: () -> Unit = {},
+    private val hideKeyboardCallback: () -> Unit = {}
 ) {
 
     @JavascriptInterface
@@ -258,6 +260,16 @@ class AndroidSysContext(
 
     fun notifyJobFinished(jobId: String, success: Boolean, message: String) {
         evaluateJs("if (window.onNativeJobFinished) { window.onNativeJobFinished('$jobId', $success, '$message'); }")
+    }
+
+    @JavascriptInterface
+    fun showFloatingKeyboard() {
+        showKeyboardCallback()
+    }
+
+    @JavascriptInterface
+    fun hideFloatingKeyboard() {
+        hideKeyboardCallback()
     }
 
     companion object {
