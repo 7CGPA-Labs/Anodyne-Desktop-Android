@@ -64,6 +64,11 @@ class DesktopPresentation(
     private lateinit var tabContainer: LinearLayout
     private lateinit var webViewContainer: FrameLayout
 
+    // Spotlight Search elements
+    private lateinit var spotlightOverlay: FrameLayout
+    private lateinit var spotlightInput: EditText
+    private lateinit var spotlightBtn: TextView
+
     // Presentation Virtual Cursor
     private lateinit var cursorView: ImageView
     private var cursorX = 0f
@@ -172,6 +177,16 @@ class DesktopPresentation(
         }
         topBar.addView(spacer)
 
+        // Spotlight Icon on presentation TopBar
+        spotlightBtn = TextView(context).apply {
+            text = "🔍"
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 11f
+            setPadding(dpToPx(10), 0, dpToPx(10), 0)
+            setOnClickListener { toggleSpotlightSearch() }
+        }
+        topBar.addView(spotlightBtn)
+
         wifiTextView = TextView(context).apply {
             text = "Wi-Fi"
             setTextColor(Color.parseColor("#94a3b8"))
@@ -238,7 +253,6 @@ class DesktopPresentation(
             )
         }
         rootLayout.addView(webViewContainer)
-
         workspaceContainer.addView(rootLayout)
 
         // Custom drawn mouse pointer on external screen
@@ -277,6 +291,9 @@ class DesktopPresentation(
             visibility = View.VISIBLE
         }
         workspaceContainer.addView(cursorView)
+
+        // 4. Spotlight Search Overlay
+        setupSpotlightSearch()
 
         setContentView(workspaceContainer)
 
@@ -896,6 +913,76 @@ class DesktopPresentation(
             return tabsList[currentTabIndex].webView
         }
         return null
+    }
+
+    // Spotlight Search layout mapping for Presentation parity
+    private fun setupSpotlightSearch() {
+        spotlightOverlay = FrameLayout(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(Color.parseColor("#99000000"))
+            visibility = View.GONE
+            setOnClickListener { hideSpotlightSearch() }
+        }
+
+        val searchPanel = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = FrameLayout.LayoutParams(
+                dpToPx(480),
+                dpToPx(50)
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = dpToPx(100)
+            }
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dpToPx(16), 0, dpToPx(16), 0)
+
+            val borderDrawable = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#161622"))
+                setStroke(1, Color.parseColor("#2a2a3a"))
+                cornerRadius = dpToPx(12).toFloat()
+            }
+            background = borderDrawable
+            setOnClickListener { } // Consume click
+        }
+
+        val searchIcon = TextView(context).apply {
+            text = "🔍"
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 16f
+            setPadding(0, 0, dpToPx(12), 0)
+        }
+        searchPanel.addView(searchIcon)
+
+        spotlightInput = EditText(context).apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            background = null
+            hint = "Spotlight Search..."
+            setHintTextColor(Color.parseColor("#475569"))
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            maxLines = 1
+            isSingleLine = true
+            isFocusable = false // Primary input handles editing focus
+        }
+        searchPanel.addView(spotlightInput)
+        spotlightOverlay.addView(searchPanel)
+        workspaceContainer.addView(spotlightOverlay)
+    }
+
+    private fun toggleSpotlightSearch() {
+        // Spotlight triggering is driven by parent activity bindings
+    }
+
+    fun showSpotlightSearch() {
+        spotlightOverlay.visibility = View.VISIBLE
+        spotlightInput.setText("")
+    }
+
+    fun hideSpotlightSearch() {
+        spotlightOverlay.visibility = View.GONE
     }
 
     override fun onStop() {

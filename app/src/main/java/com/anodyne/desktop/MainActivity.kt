@@ -23,6 +23,7 @@ import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -61,6 +62,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabScroll: HorizontalScrollView
     private lateinit var tabContainer: LinearLayout
     private lateinit var webViewContainer: FrameLayout
+
+    // Spotlight Search elements
+    private lateinit var spotlightOverlay: FrameLayout
+    private lateinit var spotlightInput: EditText
+    private lateinit var spotlightBtn: TextView
 
     // Cursor & Touchpad UI elements (Covering the entire screen)
     private lateinit var touchpadOverlay: TouchpadLayout
@@ -233,11 +239,21 @@ class MainActivity : AppCompatActivity() {
         }
         topBar.addView(modeToggle)
 
+        // macOS Spotlight Button
+        spotlightBtn = TextView(this).apply {
+            text = "🔍"
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 11f
+            setPadding(dpToPx(10), 0, dpToPx(10), 0)
+            setOnClickListener { toggleSpotlightSearch() }
+        }
+        topBar.addView(spotlightBtn)
+
         wifiTextView = TextView(this).apply {
             text = "Wi-Fi"
             setTextColor(Color.parseColor("#94a3b8"))
             textSize = 11f
-            setPadding(dpToPx(12), 0, 0, 0)
+            setPadding(dpToPx(4), 0, 0, 0)
             setOnClickListener { showWifiDropdown() }
         }
         topBar.addView(wifiTextView)
@@ -348,6 +364,9 @@ class MainActivity : AppCompatActivity() {
         }
         workspaceContainer.addView(cursorView)
 
+        // 5. Spotlight Search overlay
+        setupSpotlightSearch()
+
         setContentView(workspaceContainer)
 
         // Initialize default Home tab
@@ -424,6 +443,18 @@ class MainActivity : AppCompatActivity() {
             cursorY = workspaceContainer.height / 2f
             updateCursorViewPosition()
         }
+    }
+
+    // Intercept hardware key commands (Command/Windows key)
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+            val keyCode = event.keyCode
+            if (keyCode == android.view.KeyEvent.KEYCODE_META_LEFT || keyCode == android.view.KeyEvent.KEYCODE_META_RIGHT) {
+                toggleSpotlightSearch()
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     // macOS Dropdown UI Helper
@@ -508,7 +539,7 @@ class MainActivity : AppCompatActivity() {
     private fun showAnodyneDropdown() {
         showMacMenu(anodyneMenu, listOf(
             MacMenuItem("Toggle Pointer Mode") { 
-                val modeBtn = topBar.getChildAt(topBar.childCount - 4) as? TextView
+                val modeBtn = topBar.getChildAt(topBar.childCount - 5) as? TextView
                 modeBtn?.let { toggleInputModeText(it) }
             },
             MacMenuItem(isSeparator = true),
@@ -1022,6 +1053,124 @@ class MainActivity : AppCompatActivity() {
                 exitCastingTouchpad()
             }
         }
+    }
+
+    // Spotlight Search Operations
+    private fun setupSpotlightSearch() {
+        spotlightOverlay = FrameLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(Color.parseColor("#99000000"))
+            visibility = View.GONE
+            setOnClickListener { hideSpotlightSearch() }
+        }
+
+        val searchPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = FrameLayout.LayoutParams(
+                dpToPx(480),
+                dpToPx(50)
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = dpToPx(100)
+            }
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dpToPx(16), 0, dpToPx(16), 0)
+
+            val borderDrawable = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#161622"))
+                setStroke(1, Color.parseColor("#2a2a3a"))
+                cornerRadius = dpToPx(12).toFloat()
+            }
+            background = borderDrawable
+            setOnClickListener { } // Consume click
+        }
+
+        val searchIcon = TextView(this).apply {
+            text = "🔍"
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 16f
+            setPadding(0, 0, dpToPx(12), 0)
+        }
+        searchPanel.addView(searchIcon)
+
+        spotlightInput = EditText(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            background = null
+            hint = "Spotlight Search..."
+            setHintTextColor(Color.parseColor("#475569"))
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            maxLines = 1
+            isSingleLine = true
+            
+            setOnKeyListener { _, keyCode, event ->
+                if (event.action == android.view.KeyEvent.ACTION_DOWN && keyCode == android.view.KeyEvent.KEYCODE_ENTER) {
+                    val query = text.toString()
+                    if (query.trim().isNotEmpty()) {
+                        triggerSpotlightSearch(query)
+                        hideSpotlightSearch()
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        searchPanel.addView(spotlightInput)
+        spotlightOverlay.addView(searchPanel)
+        workspaceContainer.addView(spotlightOverlay)
+    }
+
+    private fun triggerSpotlightSearch(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return
+
+        val isUrl = trimmed.contains(".") && !trimmed.contains(" ")
+        val targetUrl = if (isUrl) {
+            if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+                "https://$trimmed"
+            } else {
+                trimmed
+            }
+        } else {
+            try {
+                "https://www.google.com/search?q=" + java.net.URLEncoder.encode(trimmed, "UTF-8")
+            } catch (e: Exception) {
+                "https://www.google.com/search?q=$trimmed"
+            }
+        }
+
+        val tabTitle = if (isUrl) trimmed else "Search: $trimmed"
+        openOrSwitchTab("web_" + System.currentTimeMillis(), targetUrl, tabTitle)
+    }
+
+    private fun toggleSpotlightSearch() {
+        runOnUiThread {
+            if (spotlightOverlay.visibility == View.VISIBLE) {
+                hideSpotlightSearch()
+                presentation?.hideSpotlightSearch()
+            } else {
+                showSpotlightSearch()
+                presentation?.showSpotlightSearch()
+            }
+        }
+    }
+
+    fun showSpotlightSearch() {
+        spotlightOverlay.visibility = View.VISIBLE
+        spotlightInput.setText("")
+        spotlightInput.requestFocus()
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.showSoftInput(spotlightInput, InputMethodManager.SHOW_IMPLICIT)
+    }
+
+    fun hideSpotlightSearch() {
+        spotlightOverlay.visibility = View.GONE
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(spotlightInput.windowToken, 0)
     }
 
     private fun moveVirtualCursor(dx: Float, dy: Float) {
