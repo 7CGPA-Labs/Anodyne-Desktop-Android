@@ -55,8 +55,21 @@ class DesktopPresentation(
         val action: (() -> Unit)? = null
     )
 
+    data class AppMenuConfig(
+        val appName: String,
+        val menus: List<AppMenuCategory>
+    )
+
+    data class AppMenuCategory(
+        val categoryName: String,
+        val items: List<String>
+    )
+
     private val tabsList = mutableListOf<TabItem>()
     private var currentTabIndex = -1
+
+    // Store custom PWA menus mapped by tabId
+    private val tabMenusMap = mutableMapOf<String, AppMenuConfig>()
 
     private lateinit var workspaceContainer: FrameLayout
     private lateinit var rootLayout: LinearLayout
@@ -83,11 +96,7 @@ class DesktopPresentation(
     private lateinit var topBar: LinearLayout
     private lateinit var logoText: TextView
     private lateinit var anodyneMenu: TextView
-    private lateinit var fileMenu: TextView
-    private lateinit var editMenu: TextView
-    private lateinit var viewMenu: TextView
-    private lateinit var windowMenu: TextView
-    private lateinit var helpMenu: TextView
+    private lateinit var leftContainer: LinearLayout
 
     private lateinit var wifiTextView: TextView
     private lateinit var batteryTextView: TextView
@@ -134,7 +143,7 @@ class DesktopPresentation(
         }
 
         // Left Container
-        val leftContainer = LinearLayout(context).apply {
+        leftContainer = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
             gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
@@ -145,44 +154,9 @@ class DesktopPresentation(
             setTextColor(Color.parseColor("#f8fafc"))
             textSize = 11f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setOnClickListener { showLogoDropdown() }
+            setOnClickListener { showLxqtAppDrawer(this) }
         }
         leftContainer.addView(logoText)
-
-        val createMenuText = { title: String, onClick: () -> Unit ->
-            TextView(context).apply {
-                text = "  $title"
-                setTextColor(Color.parseColor("#94a3b8"))
-                textSize = 8.5f
-                setPadding(dpToPx(4), 0, dpToPx(4), 0)
-                setOnClickListener { onClick() }
-            }
-        }
-
-        anodyneMenu = TextView(context).apply {
-            text = "  Anodyne"
-            setTextColor(Color.parseColor("#f8fafc"))
-            textSize = 8.5f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setPadding(dpToPx(4), 0, dpToPx(4), 0)
-            setOnClickListener { showAnodyneDropdown() }
-        }
-        leftContainer.addView(anodyneMenu)
-
-        fileMenu = createMenuText("File") { showFileDropdown() }
-        leftContainer.addView(fileMenu)
-
-        editMenu = createMenuText("Edit") { showEditDropdown() }
-        leftContainer.addView(editMenu)
-
-        viewMenu = createMenuText("View") { showViewDropdown() }
-        leftContainer.addView(viewMenu)
-
-        windowMenu = createMenuText("Window") { showWindowDropdown() }
-        leftContainer.addView(windowMenu)
-
-        helpMenu = createMenuText("Help") { showHelpDropdown() }
-        leftContainer.addView(helpMenu)
         topBar.addView(leftContainer)
 
         // Center Container
@@ -330,6 +304,145 @@ class DesktopPresentation(
 
         // Start clock timer
         clockHandler.post(clockRunnable)
+    }
+
+    // Lubuntu LXQt-style App Drawer cascading menu implementation
+    private fun showLxqtAppDrawer(anchorView: View) {
+        val popupView = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dpToPx(4), 0, dpToPx(4))
+            val borderDrawable = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#12121a"))
+                setStroke(1, Color.parseColor("#2a2a3a"))
+                cornerRadius = dpToPx(8).toFloat()
+            }
+            background = borderDrawable
+        }
+
+        val popupWindow = android.widget.PopupWindow(
+            popupView,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        ).apply {
+            elevation = dpToPx(8).toFloat()
+            isOutsideTouchable = true
+            isFocusable = true
+        }
+
+        val menuItems = listOf(
+            MacMenuItem("Accessories  ▶"),
+            MacMenuItem("Internet  ▶"),
+            MacMenuItem("System Tools  ▶"),
+            MacMenuItem("Preferences  ▶"),
+            MacMenuItem(isSeparator = true),
+            MacMenuItem("Restart Shell") { dismiss() }
+        )
+
+        for (item in menuItems) {
+            if (item.isSeparator) {
+                val sep = View(context).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        1
+                    ).apply {
+                        setMargins(0, dpToPx(4), 0, dpToPx(4))
+                    }
+                    setBackgroundColor(Color.parseColor("#2a2a3a"))
+                }
+                popupView.addView(sep)
+            } else {
+                val row = TextView(context).apply {
+                    text = item.title
+                    setTextColor(Color.parseColor("#e2e8f0"))
+                    textSize = 11f
+                    setPadding(dpToPx(16), dpToPx(6), dpToPx(24), dpToPx(6))
+                    gravity = Gravity.CENTER_VERTICAL
+                    val hoverBg = android.graphics.drawable.StateListDrawable().apply {
+                        addState(intArrayOf(android.R.attr.state_pressed), android.graphics.drawable.ColorDrawable(Color.parseColor("#3584e4")))
+                        addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+                    }
+                    background = hoverBg
+                    isClickable = true
+                    
+                    setOnClickListener {
+                        if (item.title.contains("▶")) {
+                            val subItems = when {
+                                item.title.startsWith("Accessories") -> listOf(
+                                    MacMenuItem("Spotlight Search") { toggleSpotlightSearch() },
+                                    MacMenuItem("Floating Keyboard") { 
+                                        showVirtualKeyboard()
+                                    }
+                                )
+                                item.title.startsWith("Internet") -> listOf(
+                                    MacMenuItem("Web Browser") { openOrSwitchTab("web_" + System.currentTimeMillis(), "https://www.google.com", "Google") }
+                                )
+                                item.title.startsWith("System Tools") -> listOf(
+                                    MacMenuItem("Files (Nautilus)") { openOrSwitchTab("files", "file:///android_asset/files/index.html", "Files") },
+                                    MacMenuItem("Settings (GNOME)") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") }
+                                )
+                                item.title.startsWith("Preferences") -> listOf(
+                                    MacMenuItem("System Settings") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") }
+                                )
+                                else -> emptyList()
+                            }
+                            showSubMenu(this, subItems)
+                        } else {
+                            popupWindow.dismiss()
+                            item.action?.invoke()
+                        }
+                    }
+                }
+                popupView.addView(row)
+            }
+        }
+
+        popupView.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        popupWindow.showAsDropDown(anchorView, 0, dpToPx(2))
+    }
+
+    private fun showSubMenu(anchorView: View, items: List<MacMenuItem>) {
+        val popupView = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dpToPx(4), 0, dpToPx(4))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#12121a"))
+                setStroke(1, Color.parseColor("#2a2a3a"))
+                cornerRadius = dpToPx(8).toFloat()
+            }
+        }
+        val popupWindow = android.widget.PopupWindow(
+            popupView,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        ).apply {
+            elevation = dpToPx(12).toFloat()
+            isOutsideTouchable = true
+        }
+        for (item in items) {
+            val row = TextView(context).apply {
+                text = item.title
+                setTextColor(Color.parseColor("#e2e8f0"))
+                textSize = 11f
+                setPadding(dpToPx(16), dpToPx(6), dpToPx(24), dpToPx(6))
+                background = android.graphics.drawable.StateListDrawable().apply {
+                    addState(intArrayOf(android.R.attr.state_pressed), android.graphics.drawable.ColorDrawable(Color.parseColor("#3584e4")))
+                    addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+                }
+                setOnClickListener {
+                    popupWindow.dismiss()
+                    item.action?.invoke()
+                }
+            }
+            popupView.addView(row)
+        }
+        val location = IntArray(2)
+        anchorView.getLocationOnScreen(location)
+        popupWindow.showAtLocation(anchorView, Gravity.NO_GRAVITY, location[0] + anchorView.width + dpToPx(4), location[1])
     }
 
     // GNOME-style Calendar & Notification panel for secondary presentation screens
@@ -544,6 +657,179 @@ class DesktopPresentation(
         popupWindow.showAsDropDown(anchorView, -dpToPx(180), dpToPx(2))
     }
 
+    // Dynamic TopBar menu updater according to focused PWA
+    private fun refreshTopBarMenus() {
+        leftContainer.post {
+            leftContainer.removeAllViews()
+            leftContainer.addView(logoText)
+
+            val activeTab = getActiveTabItem()
+            val tabId = activeTab?.id ?: "home"
+            val appConfig = tabMenusMap[tabId]
+
+            val appName: String
+            val menuCategories: List<Pair<String, List<String>>>
+
+            if (appConfig != null) {
+                appName = appConfig.appName
+                menuCategories = appConfig.menus.map { it.categoryName to it.items }
+            } else {
+                when (tabId) {
+                    "home" -> {
+                        appName = "Anodyne"
+                        menuCategories = listOf(
+                            "File" to listOf("New Browser Tab", "Close Active Tab"),
+                            "Edit" to listOf("Undo", "Redo", "Cut", "Copy", "Paste"),
+                            "View" to listOf("Reload Page", "Zoom In", "Zoom Out"),
+                            "Help" to listOf("Anodyne Help")
+                        )
+                    }
+                    "settings" -> {
+                        appName = "Settings"
+                        menuCategories = listOf(
+                            "File" to listOf("Close Active Tab"),
+                            "Edit" to listOf("Copy", "Paste"),
+                            "Help" to listOf("About Settings PWA")
+                        )
+                    }
+                    "files" -> {
+                        appName = "Files"
+                        menuCategories = listOf(
+                            "File" to listOf("New Folder...", "Close Active Tab"),
+                            "Edit" to listOf("Cut", "Copy", "Paste", "Delete"),
+                            "Help" to listOf("About Files PWA")
+                        )
+                    }
+                    else -> {
+                        appName = activeTab?.title ?: "Browser"
+                        menuCategories = listOf(
+                            "File" to listOf("New Browser Tab", "Close Active Tab"),
+                            "Edit" to listOf("Undo", "Redo", "Cut", "Copy", "Paste"),
+                            "View" to listOf("Reload Page", "Zoom In", "Zoom Out"),
+                            "Help" to listOf("Web Page Help")
+                        )
+                    }
+                }
+            }
+
+            anodyneMenu = TextView(context).apply {
+                text = "  $appName"
+                setTextColor(Color.parseColor("#f8fafc"))
+                textSize = 8.5f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setPadding(dpToPx(4), 0, dpToPx(4), 0)
+                setOnClickListener { showAppNameDropdown(appName) }
+            }
+            leftContainer.addView(anodyneMenu)
+
+            for (category in menuCategories) {
+                val menuView = TextView(context).apply {
+                    text = "  ${category.first}"
+                    setTextColor(Color.parseColor("#94a3b8"))
+                    textSize = 8.5f
+                    setPadding(dpToPx(4), 0, dpToPx(4), 0)
+                    setOnClickListener {
+                        showCategoryDropdown(this, category.first, category.second)
+                    }
+                }
+                leftContainer.addView(menuView)
+            }
+        }
+    }
+
+    private fun showAppNameDropdown(appName: String) {
+        val list = listOf(
+            MacMenuItem("About $appName") { showAboutDialog() },
+            MacMenuItem(isSeparator = true),
+            MacMenuItem("Quit $appName") { getActiveTabItem()?.let { closeTab(it) } }
+        )
+        showMacMenu(anodyneMenu, list)
+    }
+
+    private fun showCategoryDropdown(anchorView: View, categoryName: String, items: List<String>) {
+        val menuItems = items.map { itemTitle ->
+            MacMenuItem(itemTitle) {
+                val activeTab = getActiveTabItem()
+                val tabId = activeTab?.id ?: "home"
+                
+                if (tabMenusMap.containsKey(tabId)) {
+                    val webView = activeTab?.webView
+                    val js = """
+                        window.dispatchEvent(new CustomEvent('appMenuClicked', {
+                            detail: { category: '$categoryName', item: '$itemTitle' }
+                        }));
+                    """.trimIndent()
+                    webView?.evaluateJavascript(js, null)
+                } else {
+                    executeDefaultMenuAction(categoryName, itemTitle)
+                }
+            }
+        }
+        showMacMenu(anchorView, menuItems)
+    }
+
+    private fun executeDefaultMenuAction(category: String, item: String) {
+        val webView = getActiveWebView()
+        when (category) {
+            "File" -> {
+                when (item) {
+                    "New Browser Tab" -> openOrSwitchTab("web_" + System.currentTimeMillis(), "file:///android_asset/homepage/index.html", "New Tab")
+                    "Close Active Tab" -> getActiveTabItem()?.let { closeTab(it) }
+                }
+            }
+            "Edit" -> {
+                if (webView == null) return
+                when (item) {
+                    "Undo" -> webView.evaluateJavascript("document.execCommand('undo')", null)
+                    "Redo" -> webView.evaluateJavascript("document.execCommand('redo')", null)
+                    "Cut" -> webView.evaluateJavascript("document.execCommand('cut')", null)
+                    "Copy" -> webView.evaluateJavascript("document.execCommand('copy')", null)
+                    "Paste" -> webView.evaluateJavascript("document.execCommand('paste')", null)
+                    "Select All" -> webView.evaluateJavascript("document.execCommand('selectAll')", null)
+                }
+            }
+            "View" -> {
+                if (webView == null) return
+                when (item) {
+                    "Reload Page" -> webView.reload()
+                    "Zoom In" -> webView.zoomIn()
+                    "Zoom Out" -> webView.zoomOut()
+                }
+            }
+            "Help" -> {
+                when (item) {
+                    "Anodyne Help" -> openOrSwitchTab("help", "https://github.com/7CGPA-Labs/Anodyne-Desktop-Android", "Anodyne Help")
+                    "About Settings PWA", "About Files PWA", "Web Page Help" -> showAboutDialog()
+                }
+            }
+        }
+    }
+
+    private fun registerPwaMenus(tabId: String, appName: String, json: String) {
+        webViewContainer.post {
+            try {
+                val list = mutableListOf<AppMenuCategory>()
+                val arr = org.json.JSONArray(json)
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val cat = obj.getString("category")
+                    val itemsArr = obj.getJSONArray("items")
+                    val itemsList = mutableListOf<String>()
+                    for (j in 0 until itemsArr.length()) {
+                        itemsList.add(itemsArr.getString(j))
+                    }
+                    list.add(AppMenuCategory(cat, itemsList))
+                }
+                tabMenusMap[tabId] = AppMenuConfig(appName, list)
+                if (currentTabIndex in tabsList.indices && tabsList[currentTabIndex].id == tabId) {
+                    refreshTopBarMenus()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing PWA menus JSON", e)
+            }
+        }
+    }
+
     // macOS Dropdown UI Helper
     private fun showMacMenu(anchorView: View, menuItems: List<MacMenuItem>) {
         val popupView = LinearLayout(context).apply {
@@ -611,67 +897,6 @@ class DesktopPresentation(
         popupWindow.showAsDropDown(anchorView, 0, dpToPx(2))
     }
 
-    private fun showLogoDropdown() {
-        showMacMenu(logoText, listOf(
-            MacMenuItem("About Anodyne Desktop") { showAboutDialog() },
-            MacMenuItem("System Preferences...") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") },
-            MacMenuItem(isSeparator = true),
-            MacMenuItem("Lock Screen") { showToast("Desktop Locked") },
-            MacMenuItem("Shut Down...") { dismiss() }
-        ))
-    }
-
-    private fun showAnodyneDropdown() {
-        showMacMenu(anodyneMenu, listOf(
-            MacMenuItem("Quit Anodyne Presentation") { dismiss() }
-        ))
-    }
-
-    private fun showFileDropdown() {
-        showMacMenu(fileMenu ?: logoText, listOf(
-            MacMenuItem("New Browser Tab") { openOrSwitchTab("web_" + System.currentTimeMillis(), "file:///android_asset/homepage/index.html", "New Tab") },
-            MacMenuItem("Close Active Tab") { getActiveTabItem()?.let { closeTab(it) } },
-            MacMenuItem(isSeparator = true),
-            MacMenuItem("Go to Website URL...") { showGoToUrlDialog() }
-        ))
-    }
-
-    private fun showEditDropdown() {
-        showMacMenu(editMenu ?: logoText, listOf(
-            MacMenuItem("Undo") { getActiveWebView()?.evaluateJavascript("document.execCommand('undo')", null) },
-            MacMenuItem("Redo") { getActiveWebView()?.evaluateJavascript("document.execCommand('redo')", null) },
-            MacMenuItem(isSeparator = true),
-            MacMenuItem("Cut") { getActiveWebView()?.evaluateJavascript("document.execCommand('cut')", null) },
-            MacMenuItem("Copy") { getActiveWebView()?.evaluateJavascript("document.execCommand('copy')", null) },
-            MacMenuItem("Paste") { getActiveWebView()?.evaluateJavascript("document.execCommand('paste')", null) },
-            MacMenuItem("Select All") { getActiveWebView()?.evaluateJavascript("document.execCommand('selectAll')", null) }
-        ))
-    }
-
-    private fun showViewDropdown() {
-        showMacMenu(viewMenu ?: logoText, listOf(
-            MacMenuItem("Reload Page") { getActiveWebView()?.reload() },
-            MacMenuItem("Force Reload") { getActiveWebView()?.apply { clearCache(true); reload() } },
-            MacMenuItem(isSeparator = true),
-            MacMenuItem("Actual Size") { getActiveWebView()?.zoomBy(1.0f) },
-            MacMenuItem("Zoom In") { getActiveWebView()?.zoomIn() },
-            MacMenuItem("Zoom Out") { getActiveWebView()?.zoomOut() }
-        ))
-    }
-
-    private fun showWindowDropdown() {
-        showMacMenu(windowMenu ?: logoText, listOf(
-            MacMenuItem("Bring All to Front") { openOrSwitchTab("home", "file:///android_asset/homepage/index.html", "Dashboard") }
-        ))
-    }
-
-    private fun showHelpDropdown() {
-        showMacMenu(helpMenu ?: logoText, listOf(
-            MacMenuItem("Anodyne Help") { openOrSwitchTab("help", "https://github.com/7CGPA-Labs/Anodyne-Desktop-Android", "Anodyne Help") },
-            MacMenuItem("Send Feedback...") { openOrSwitchTab("feedback", "https://github.com/7CGPA-Labs/Anodyne-Desktop-Android/issues", "Send Feedback") }
-        ))
-    }
-
     private fun showWifiDropdown() {
         showMacMenu(wifiTextView, listOf(
             MacMenuItem("SSID: " + getWifiSSID()),
@@ -687,13 +912,6 @@ class DesktopPresentation(
             MacMenuItem("Current Charge: " + getBatteryPct() + "%"),
             MacMenuItem(isSeparator = true),
             MacMenuItem("Battery Health: Good")
-        ))
-    }
-
-    private fun showClockDropdown() {
-        showMacMenu(clockTextView, listOf(
-            MacMenuItem("Date: " + SimpleDateFormat("EEEE, d MMMM yyyy", Locale.US).format(Date())),
-            MacMenuItem("Timezone: " + java.util.TimeZone.getDefault().displayName)
         ))
     }
 
@@ -754,7 +972,7 @@ class DesktopPresentation(
     }
 
     private fun showGoToUrlDialog() {
-        val input = android.widget.EditText(context).apply {
+        val input = EditText(context).apply {
             hint = "https://example.com"
             inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI
             setPadding(dpToPx(16), dpToPx(8), dpToPx(16), dpToPx(8))
@@ -777,350 +995,6 @@ class DesktopPresentation(
 
     private fun showToast(msg: String) {
         android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
-    }
-
-    fun movePresentationCursor(dx: Float, dy: Float) {
-        clockHandler.post {
-            val maxW = workspaceContainer.width.toFloat()
-            val maxH = workspaceContainer.height.toFloat()
-
-            cursorX = (cursorX + dx).coerceIn(0f, maxW)
-            cursorY = (cursorY + dy).coerceIn(0f, maxH)
-
-            cursorView.x = cursorX
-            cursorView.y = cursorY
-
-            dispatchHoverAtCursor()
-        }
-    }
-
-    fun performPresentationClick(isRightClick: Boolean) {
-        clockHandler.post {
-            val webView = getActiveWebView()
-            val cx = cursorX
-            val cy = cursorY
-            val offset = topBar.height + tabScroll.height + dpToPx(2)
-
-            if (webView != null && cy >= offset) {
-                val relativeY = cy - offset
-                if (isRightClick) {
-                    webView.evaluateJavascript(
-                        "var el = document.elementFromPoint($cx, $relativeY); if (el) { el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, button: 2, clientX: $cx, clientY: $relativeY })); }",
-                        null
-                    )
-                } else {
-                    val downTime = SystemClock.uptimeMillis()
-                    val eventTime = SystemClock.uptimeMillis()
-                    val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, relativeY, 0).apply {
-                        source = InputDevice.SOURCE_MOUSE
-                    }
-                    val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, relativeY, 0).apply {
-                        source = InputDevice.SOURCE_MOUSE
-                    }
-                    webView.dispatchTouchEvent(downEvent)
-                    webView.dispatchTouchEvent(upEvent)
-                    downEvent.recycle()
-                    upEvent.recycle()
-                }
-            } else {
-                if (!isRightClick) {
-                    val downTime = SystemClock.uptimeMillis()
-                    val eventTime = SystemClock.uptimeMillis()
-                    val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, cy, 0).apply {
-                        source = InputDevice.SOURCE_MOUSE
-                    }
-                    val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, cy, 0).apply {
-                        source = InputDevice.SOURCE_MOUSE
-                    }
-                    rootLayout.dispatchTouchEvent(downEvent)
-                    rootLayout.dispatchTouchEvent(upEvent)
-                    downEvent.recycle()
-                    upEvent.recycle()
-                }
-            }
-        }
-    }
-
-    fun scrollPresentation(dy: Float) {
-        clockHandler.post {
-            val webView = getActiveWebView() ?: return@post
-            webView.scrollBy(0, (-dy).toInt())
-        }
-    }
-
-    private fun dispatchHoverAtCursor() {
-        val webView = getActiveWebView() ?: return
-        val cx = cursorX
-        val cy = cursorY
-        val offset = topBar.height + tabScroll.height + dpToPx(2)
-
-        if (cy >= offset) {
-            val relativeY = cy - offset
-            val downTime = SystemClock.uptimeMillis()
-            val eventTime = SystemClock.uptimeMillis()
-            val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, relativeY, 0).apply {
-                source = InputDevice.SOURCE_MOUSE
-            }
-            webView.dispatchGenericMotionEvent(hoverEvent)
-            hoverEvent.recycle()
-        }
-    }
-
-    private fun updateClockAndStatus() {
-        val sdf = SimpleDateFormat("EEE MMM d  H:mm", Locale.US)
-        clockTextView.text = sdf.format(Date())
-    }
-
-    private fun createTabWebView(url: String): WebView {
-        val newWebView = WebView(context).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            )
-            visibility = View.GONE
-            setLayerType(View.LAYER_TYPE_HARDWARE, null)
-
-            // Configure Native Scrollbars
-            isScrollbarFadingEnabled = false
-            scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-            isHorizontalScrollBarEnabled = true
-            isVerticalScrollBarEnabled = true
-
-            webViewClient = object : WebViewClient() {
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    super.onPageFinished(view, url)
-                    Log.d(TAG, "Casting WebView page finished loading: $url")
-
-                    val metrics = context.resources.displayMetrics
-                    val width = metrics.widthPixels
-
-                    val targetWidth = if (width >= 1920) 1920 else 1280
-
-                    view?.evaluateJavascript(
-                        """
-                        (function() {
-                            var meta = document.querySelector('meta[name=viewport]');
-                            if (!meta) {
-                                meta = document.createElement('meta');
-                                meta.name = 'viewport';
-                                document.head.appendChild(meta);
-                            }
-                            meta.setAttribute('content', 'width=$targetWidth, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no');
-                            
-                            var style = document.getElementById('zoom-style');
-                            if (!style) {
-                                style = document.createElement('style');
-                                style.id = 'zoom-style';
-                                style.innerHTML = 'html { zoom: var(--ui-scale, 1.0); }';
-                                document.head.appendChild(style);
-                            }
-                            document.documentElement.style.setProperty('--ui-scale', '1.0');
-                            
-                            // Inject custom styled desktop scrollbars
-                            var sbStyle = document.getElementById('scrollbar-style');
-                            if (!sbStyle) {
-                                sbStyle = document.createElement('style');
-                                sbStyle.id = 'scrollbar-style';
-                                sbStyle.innerHTML = '::-webkit-scrollbar { width: 8px !important; height: 8px !important; } ::-webkit-scrollbar-track { background: #0c0c14 !important; } ::-webkit-scrollbar-thumb { background: #475569 !important; border-radius: 4px !important; } ::-webkit-scrollbar-thumb:hover { background: #64748b !important; }';
-                                document.head.appendChild(sbStyle);
-                            }
-                            
-                            // Focus state detection for virtual keyboard integration (presentation parity)
-                            if (window.hasKeyboardListener) return;
-                            window.hasKeyboardListener = true;
-                            document.addEventListener('focusin', function(e) {
-                                var el = e.target;
-                                if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.contentEditable === 'true')) {
-                                    if (window.sysContext && typeof window.sysContext.showFloatingKeyboard === 'function') {
-                                        window.sysContext.showFloatingKeyboard();
-                                    }
-                                }
-                            });
-                            document.addEventListener('focusout', function(e) {
-                                var el = e.target;
-                                if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.contentEditable === 'true')) {
-                                    if (window.sysContext && typeof window.sysContext.hideFloatingKeyboard === 'function') {
-                                        window.sysContext.hideFloatingKeyboard();
-                                    }
-                                }
-                            });
-                        })();
-                        """.trimIndent(),
-                        null
-                    )
-                }
-            }
-        }
-
-        newWebView.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            allowFileAccess = true
-            allowContentAccess = true
-            databaseEnabled = true
-            loadWithOverviewMode = true
-            useWideViewPort = true
-            builtInZoomControls = false
-            displayZoomControls = false
-            cacheMode = WebSettings.LOAD_DEFAULT
-        }
-
-        val sysContext = AndroidSysContext(context,
-            launchTabCallback = { appId, targetUrl, title ->
-                openOrSwitchTab(appId, targetUrl, title)
-            },
-            evaluateJs = { js ->
-                newWebView.post {
-                    newWebView.evaluateJavascript(js, null)
-                }
-            },
-            showKeyboardCallback = {
-                showVirtualKeyboard()
-            },
-            hideKeyboardCallback = {
-                hideVirtualKeyboard()
-            }
-        )
-        newWebView.addJavascriptInterface(sysContext, "sysContext")
-        newWebView.loadUrl(url)
-
-        return newWebView
-    }
-
-    fun openOrSwitchTab(id: String, url: String, title: String) {
-        webViewContainer.post {
-            val existingIndex = tabsList.indexOfFirst { it.id == id }
-            if (existingIndex != -1) {
-                switchTab(existingIndex)
-            } else {
-                val newWebView = createTabWebView(url)
-                webViewContainer.addView(newWebView)
-
-                val newTab = TabItem(id, url, title, newWebView)
-                tabsList.add(newTab)
-
-                switchTab(tabsList.size - 1)
-            }
-        }
-    }
-
-    private fun switchTab(index: Int) {
-        if (index !in tabsList.indices) return
-
-        if (currentTabIndex in tabsList.indices) {
-            tabsList[currentTabIndex].webView.visibility = View.GONE
-        }
-
-        currentTabIndex = index
-
-        val activeTab = tabsList[currentTabIndex]
-        activeTab.webView.visibility = View.VISIBLE
-
-        refreshTabUI()
-    }
-
-    private fun closeTab(tab: TabItem) {
-        if (tab.id == "home") return
-
-        val index = tabsList.indexOf(tab)
-        if (index == -1) return
-
-        webViewContainer.removeView(tab.webView)
-        tab.webView.destroy()
-        tabsList.removeAt(index)
-
-        if (currentTabIndex >= tabsList.size) {
-            currentTabIndex = tabsList.size - 1
-        } else if (currentTabIndex > index) {
-            currentTabIndex--
-        }
-
-        switchTab(currentTabIndex)
-    }
-
-    private fun refreshTabUI() {
-        tabContainer.removeAllViews()
-
-        for (i in 0 until tabsList.size) {
-            val tab = tabsList[i]
-            val isActive = (i == currentTabIndex)
-
-            val tabItem = LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(
-                    dpToPx(100),
-                    LinearLayout.LayoutParams.MATCH_PARENT
-                ).apply {
-                    topMargin = dpToPx(3)
-                    rightMargin = dpToPx(2)
-                }
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dpToPx(8), 0, dpToPx(6), 0)
-                
-                val tabDrawable = android.graphics.drawable.GradientDrawable().apply {
-                    setColor(Color.parseColor(if (isActive) "#1e1e2e" else "#0c0c14"))
-                    val r = dpToPx(5).toFloat()
-                    cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
-                }
-                background = tabDrawable
-                
-                setOnClickListener {
-                    switchTab(i)
-                }
-            }
-
-            val titleText = TextView(context).apply {
-                text = tab.title
-                setTextColor(Color.parseColor(if (isActive) "#f8fafc" else "#94a3b8"))
-                textSize = 8.5f
-                maxLines = 1
-                ellipsize = TextUtils.TruncateAt.END
-                layoutParams = LinearLayout.LayoutParams(
-                    0,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    1f
-                )
-            }
-            tabItem.addView(titleText)
-
-            if (tab.id != "home") {
-                val closeBtn = TextView(context).apply {
-                    text = " × "
-                    setTextColor(Color.parseColor(if (isActive) "#94a3b8" else "#64748b"))
-                    textSize = 10f
-                    gravity = Gravity.CENTER
-                    setPadding(dpToPx(2), dpToPx(1), dpToPx(2), dpToPx(1))
-                    val btnBg = android.graphics.drawable.GradientDrawable().apply {
-                        setColor(Color.TRANSPARENT)
-                        cornerRadius = dpToPx(5).toFloat()
-                    }
-                    background = btnBg
-                    
-                    setOnHoverListener { v, event ->
-                        if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
-                            (v.background as? android.graphics.drawable.GradientDrawable)?.setColor(Color.parseColor("#334155"))
-                            setTextColor(Color.WHITE)
-                        } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
-                            (v.background as? android.graphics.drawable.GradientDrawable)?.setColor(Color.TRANSPARENT)
-                            setTextColor(Color.parseColor(if (isActive) "#94a3b8" else "#64748b"))
-                        }
-                        false
-                    }
-                    
-                    setOnClickListener {
-                        closeTab(tab)
-                    }
-                }
-                tabItem.addView(closeBtn)
-            }
-
-            tabContainer.addView(tabItem)
-        }
-    }
-
-    private fun dpToPx(dp: Int): Int {
-        val density = context.resources.displayMetrics.density
-        return (dp * density).toInt()
     }
 
     private fun getActiveTabItem(): TabItem? {
@@ -1323,7 +1197,354 @@ class DesktopPresentation(
         }
     }
 
+    fun movePresentationCursor(dx: Float, dy: Float) {
+        clockHandler.post {
+            val maxW = workspaceContainer.width.toFloat()
+            val maxH = workspaceContainer.height.toFloat()
 
+            cursorX = (cursorX + dx).coerceIn(0f, maxW)
+            cursorY = (cursorY + dy).coerceIn(0f, maxH)
+
+            cursorView.x = cursorX
+            cursorView.y = cursorY
+
+            dispatchHoverAtCursor()
+        }
+    }
+
+    fun performPresentationClick(isRightClick: Boolean) {
+        clockHandler.post {
+            val webView = getActiveWebView()
+            val cx = cursorX
+            val cy = cursorY
+            val offset = topBar.height + tabScroll.height + dpToPx(2)
+
+            if (webView != null && cy >= offset) {
+                val relativeY = cy - offset
+                if (isRightClick) {
+                    webView.evaluateJavascript(
+                        "var el = document.elementFromPoint($cx, $relativeY); if (el) { el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, button: 2, clientX: $cx, clientY: $relativeY })); }",
+                        null
+                    )
+                } else {
+                    val downTime = SystemClock.uptimeMillis()
+                    val eventTime = SystemClock.uptimeMillis()
+                    val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, relativeY, 0).apply {
+                        source = InputDevice.SOURCE_MOUSE
+                    }
+                    val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, relativeY, 0).apply {
+                        source = InputDevice.SOURCE_MOUSE
+                    }
+                    webView.dispatchTouchEvent(downEvent)
+                    webView.dispatchTouchEvent(upEvent)
+                    downEvent.recycle()
+                    upEvent.recycle()
+                }
+            } else {
+                if (!isRightClick) {
+                    val downTime = SystemClock.uptimeMillis()
+                    val eventTime = SystemClock.uptimeMillis()
+                    val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, cy, 0).apply {
+                        source = InputDevice.SOURCE_MOUSE
+                    }
+                    val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, cy, 0).apply {
+                        source = InputDevice.SOURCE_MOUSE
+                    }
+                    rootLayout.dispatchTouchEvent(downEvent)
+                    rootLayout.dispatchTouchEvent(upEvent)
+                    downEvent.recycle()
+                    upEvent.recycle()
+                }
+            }
+        }
+    }
+
+    fun scrollPresentation(dy: Float) {
+        clockHandler.post {
+            val webView = getActiveWebView() ?: return@post
+            webView.scrollBy(0, (-dy).toInt())
+        }
+    }
+
+    private fun dispatchHoverAtCursor() {
+        val webView = getActiveWebView() ?: return
+        val cx = cursorX
+        val cy = cursorY
+        val offset = topBar.height + tabScroll.height + dpToPx(2)
+
+        if (cy >= offset) {
+            val relativeY = cy - offset
+            val downTime = SystemClock.uptimeMillis()
+            val eventTime = SystemClock.uptimeMillis()
+            val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, relativeY, 0).apply {
+                source = InputDevice.SOURCE_MOUSE
+            }
+            webView.dispatchGenericMotionEvent(hoverEvent)
+            hoverEvent.recycle()
+        }
+    }
+
+    private fun updateClockAndStatus() {
+        val sdf = SimpleDateFormat("EEE MMM d  H:mm", Locale.US)
+        clockTextView.text = sdf.format(Date())
+    }
+
+    private fun createTabWebView(url: String): WebView {
+        val newWebView = WebView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            visibility = View.GONE
+            setLayerType(View.LAYER_TYPE_HARDWARE, null)
+
+            // Configure Native Scrollbars
+            isScrollbarFadingEnabled = false
+            scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
+            isHorizontalScrollBarEnabled = true
+            isVerticalScrollBarEnabled = true
+
+            webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    Log.d(TAG, "Casting WebView page finished loading: $url")
+
+                    val metrics = context.resources.displayMetrics
+                    val width = metrics.widthPixels
+
+                    val targetWidth = if (width >= 1920) 1920 else 1280
+
+                    view?.evaluateJavascript(
+                        """
+                        (function() {
+                            var meta = document.querySelector('meta[name=viewport]');
+                            if (!meta) {
+                                meta = document.createElement('meta');
+                                meta.name = 'viewport';
+                                document.head.appendChild(meta);
+                            }
+                            meta.setAttribute('content', 'width=$targetWidth, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no');
+                            
+                            var style = document.getElementById('zoom-style');
+                            if (!style) {
+                                style = document.createElement('style');
+                                style.id = 'zoom-style';
+                                style.innerHTML = 'html { zoom: var(--ui-scale, 1.0); }';
+                                document.head.appendChild(style);
+                            }
+                            document.documentElement.style.setProperty('--ui-scale', '1.0');
+                            
+                            // Inject custom styled desktop scrollbars
+                            var sbStyle = document.getElementById('scrollbar-style');
+                            if (!sbStyle) {
+                                sbStyle = document.createElement('style');
+                                sbStyle.id = 'scrollbar-style';
+                                sbStyle.innerHTML = '::-webkit-scrollbar { width: 8px !important; height: 8px !important; } ::-webkit-scrollbar-track { background: #0c0c14 !important; } ::-webkit-scrollbar-thumb { background: #475569 !important; border-radius: 4px !important; } ::-webkit-scrollbar-thumb:hover { background: #64748b !important; }';
+                                document.head.appendChild(sbStyle);
+                            }
+                            
+                            // Focus state detection for virtual keyboard integration (presentation parity)
+                            if (window.hasKeyboardListener) return;
+                            window.hasKeyboardListener = true;
+                            document.addEventListener('focusin', function(e) {
+                                var el = e.target;
+                                if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.contentEditable === 'true')) {
+                                    if (window.sysContext && typeof window.sysContext.showFloatingKeyboard === 'function') {
+                                        window.sysContext.showFloatingKeyboard();
+                                    }
+                                }
+                            });
+                            document.addEventListener('focusout', function(e) {
+                                var el = e.target;
+                                if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.contentEditable === 'true')) {
+                                    if (window.sysContext && typeof window.sysContext.hideFloatingKeyboard === 'function') {
+                                        window.sysContext.hideFloatingKeyboard();
+                                    }
+                                }
+                            });
+                        })();
+                        """.trimIndent(),
+                        null
+                    )
+                }
+            }
+        }
+
+        newWebView.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            allowFileAccess = true
+            allowContentAccess = true
+            databaseEnabled = true
+            loadWithOverviewMode = true
+            useWideViewPort = true
+            builtInZoomControls = false
+            displayZoomControls = false
+            cacheMode = WebSettings.LOAD_DEFAULT
+        }
+
+        val sysContext = AndroidSysContext(context,
+            launchTabCallback = { appId, targetUrl, title ->
+                openOrSwitchTab(appId, targetUrl, title)
+            },
+            evaluateJs = { js ->
+                newWebView.post {
+                    newWebView.evaluateJavascript(js, null)
+                }
+            },
+            showKeyboardCallback = {
+                showVirtualKeyboard()
+            },
+            hideKeyboardCallback = {
+                hideVirtualKeyboard()
+            },
+            setMenusCallback = { appName, json ->
+                registerPwaMenus(url, appName, json)
+            }
+        )
+        newWebView.addJavascriptInterface(sysContext, "sysContext")
+        newWebView.loadUrl(url)
+
+        return newWebView
+    }
+
+    fun openOrSwitchTab(id: String, url: String, title: String) {
+        webViewContainer.post {
+            val existingIndex = tabsList.indexOfFirst { it.id == id }
+            if (existingIndex != -1) {
+                switchTab(existingIndex)
+            } else {
+                val newWebView = createTabWebView(url)
+                webViewContainer.addView(newWebView)
+
+                val newTab = TabItem(id, url, title, newWebView)
+                tabsList.add(newTab)
+
+                switchTab(tabsList.size - 1)
+            }
+        }
+    }
+
+    private fun switchTab(index: Int) {
+        if (index !in tabsList.indices) return
+
+        if (currentTabIndex in tabsList.indices) {
+            tabsList[currentTabIndex].webView.visibility = View.GONE
+        }
+
+        currentTabIndex = index
+
+        val activeTab = tabsList[currentTabIndex]
+        activeTab.webView.visibility = View.VISIBLE
+
+        refreshTabUI()
+        refreshTopBarMenus()
+    }
+
+    private fun closeTab(tab: TabItem) {
+        if (tab.id == "home") return
+
+        val index = tabsList.indexOf(tab)
+        if (index == -1) return
+
+        webViewContainer.removeView(tab.webView)
+        tab.webView.destroy()
+        tabsList.removeAt(index)
+        tabMenusMap.remove(tab.id)
+
+        if (currentTabIndex >= tabsList.size) {
+            currentTabIndex = tabsList.size - 1
+        } else if (currentTabIndex > index) {
+            currentTabIndex--
+        }
+
+        switchTab(currentTabIndex)
+    }
+
+    private fun refreshTabUI() {
+        tabContainer.removeAllViews()
+
+        for (i in 0 until tabsList.size) {
+            val tab = tabsList[i]
+            val isActive = (i == currentTabIndex)
+
+            val tabItem = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    dpToPx(100),
+                    LinearLayout.LayoutParams.MATCH_PARENT
+                ).apply {
+                    topMargin = dpToPx(3)
+                    rightMargin = dpToPx(2)
+                }
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dpToPx(8), 0, dpToPx(6), 0)
+                
+                val tabDrawable = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.parseColor(if (isActive) "#1e1e2e" else "#0c0c14"))
+                    val r = dpToPx(5).toFloat()
+                    cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+                }
+                background = tabDrawable
+                
+                setOnClickListener {
+                    switchTab(i)
+                }
+            }
+
+            val titleText = TextView(context).apply {
+                text = tab.title
+                setTextColor(Color.parseColor(if (isActive) "#f8fafc" else "#94a3b8"))
+                textSize = 8.5f
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                layoutParams = LinearLayout.LayoutParams(
+                    0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    1f
+                )
+            }
+            tabItem.addView(titleText)
+
+            if (tab.id != "home") {
+                val closeBtn = TextView(context).apply {
+                    text = " × "
+                    setTextColor(Color.parseColor(if (isActive) "#94a3b8" else "#64748b"))
+                    textSize = 10f
+                    gravity = Gravity.CENTER
+                    setPadding(dpToPx(2), dpToPx(1), dpToPx(2), dpToPx(1))
+                    val btnBg = android.graphics.drawable.GradientDrawable().apply {
+                        setColor(Color.TRANSPARENT)
+                        cornerRadius = dpToPx(5).toFloat()
+                    }
+                    background = btnBg
+                    
+                    setOnHoverListener { v, event ->
+                        if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
+                            (v.background as? android.graphics.drawable.GradientDrawable)?.setColor(Color.parseColor("#334155"))
+                            setTextColor(Color.WHITE)
+                        } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
+                            (v.background as? android.graphics.drawable.GradientDrawable)?.setColor(Color.TRANSPARENT)
+                            setTextColor(Color.parseColor(if (isActive) "#94a3b8" else "#64748b"))
+                        }
+                        false
+                    }
+                    
+                    setOnClickListener {
+                        closeTab(tab)
+                    }
+                }
+                tabItem.addView(closeBtn)
+            }
+
+            tabContainer.addView(tabItem)
+        }
+    }
+
+    private fun dpToPx(dp: Int): Int {
+        val density = context.resources.displayMetrics.density
+        return (dp * density).toInt()
+    }
 
     override fun onStop() {
         Log.i(TAG, "Stopping presentation")
