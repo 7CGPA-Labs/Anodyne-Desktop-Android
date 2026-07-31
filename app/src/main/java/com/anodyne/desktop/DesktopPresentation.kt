@@ -2,6 +2,8 @@ package com.anodyne.desktop
 
 import android.app.Presentation
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -24,11 +26,13 @@ import android.view.ViewGroup
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -43,6 +47,12 @@ class DesktopPresentation(
         val url: String,
         var title: String,
         val webView: WebView
+    )
+
+    class MacMenuItem(
+        val title: String = "",
+        val isSeparator: Boolean = false,
+        val action: (() -> Unit)? = null
     )
 
     private val tabsList = mutableListOf<TabItem>()
@@ -61,6 +71,14 @@ class DesktopPresentation(
 
     // Top Bar UI elements
     private lateinit var topBar: LinearLayout
+    private lateinit var logoText: TextView
+    private lateinit var anodyneMenu: TextView
+    private lateinit var fileMenu: TextView
+    private lateinit var editMenu: TextView
+    private lateinit var viewMenu: TextView
+    private lateinit var windowMenu: TextView
+    private lateinit var helpMenu: TextView
+
     private lateinit var wifiTextView: TextView
     private lateinit var batteryTextView: TextView
     private lateinit var clockTextView: TextView
@@ -105,29 +123,49 @@ class DesktopPresentation(
             setPadding(dpToPx(14), 0, dpToPx(14), 0)
         }
 
-        val logoText = TextView(context).apply {
+        logoText = TextView(context).apply {
             text = "⬡"
             setTextColor(Color.parseColor("#f8fafc"))
             textSize = 14f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setOnClickListener {
-                openOrSwitchTab("home", "file:///android_asset/homepage/index.html", "Dashboard")
-            }
+            setOnClickListener { showLogoDropdown() }
         }
         topBar.addView(logoText)
 
-        val addMenu = { title: String, isActive: Boolean ->
-            val menu = TextView(context).apply {
+        val createMenuText = { title: String, onClick: () -> Unit ->
+            TextView(context).apply {
                 text = "  $title"
-                setTextColor(Color.parseColor(if (isActive) "#f8fafc" else "#94a3b8"))
+                setTextColor(Color.parseColor("#94a3b8"))
                 textSize = 11f
-                if (isActive) typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setPadding(dpToPx(6), 0, dpToPx(6), 0)
+                setOnClickListener { onClick() }
             }
-            topBar.addView(menu)
         }
-        addMenu("Anodyne", true)
-        addMenu("File", false)
-        addMenu("Edit", false)
+
+        anodyneMenu = TextView(context).apply {
+            text = "  Anodyne"
+            setTextColor(Color.parseColor("#f8fafc"))
+            textSize = 11f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setPadding(dpToPx(6), 0, dpToPx(6), 0)
+            setOnClickListener { showAnodyneDropdown() }
+        }
+        topBar.addView(anodyneMenu)
+
+        fileMenu = createMenuText("File") { showFileDropdown() }
+        topBar.addView(fileMenu)
+
+        editMenu = createMenuText("Edit") { showEditDropdown() }
+        topBar.addView(editMenu)
+
+        viewMenu = createMenuText("View") { showViewDropdown() }
+        topBar.addView(viewMenu)
+
+        windowMenu = createMenuText("Window") { showWindowDropdown() }
+        topBar.addView(windowMenu)
+
+        helpMenu = createMenuText("Help") { showHelpDropdown() }
+        topBar.addView(helpMenu)
 
         val spacer = View(context).apply {
             layoutParams = LinearLayout.LayoutParams(0, 0, 1f)
@@ -138,6 +176,7 @@ class DesktopPresentation(
             text = "Wi-Fi"
             setTextColor(Color.parseColor("#94a3b8"))
             textSize = 11f
+            setOnClickListener { showWifiDropdown() }
         }
         topBar.addView(wifiTextView)
 
@@ -146,6 +185,7 @@ class DesktopPresentation(
             setTextColor(Color.parseColor("#94a3b8"))
             textSize = 11f
             setPadding(dpToPx(8), 0, dpToPx(8), 0)
+            setOnClickListener { showBatteryDropdown() }
         }
         topBar.addView(batteryTextView)
 
@@ -153,6 +193,7 @@ class DesktopPresentation(
             setTextColor(Color.parseColor("#f8fafc"))
             textSize = 11f
             setPadding(dpToPx(12), 0, 0, 0)
+            setOnClickListener { showClockDropdown() }
         }
         topBar.addView(clockTextView)
 
@@ -244,6 +285,233 @@ class DesktopPresentation(
 
         // Start clock timer
         clockHandler.post(clockRunnable)
+    }
+
+    // macOS Dropdown UI Helper
+    private fun showMacMenu(anchorView: View, menuItems: List<MacMenuItem>) {
+        val popupView = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dpToPx(4), 0, dpToPx(4))
+            val borderDrawable = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#12121a"))
+                setStroke(1, Color.parseColor("#2a2a3a"))
+                cornerRadius = dpToPx(8).toFloat()
+            }
+            background = borderDrawable
+        }
+
+        val popupWindow = android.widget.PopupWindow(
+            popupView,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        ).apply {
+            elevation = dpToPx(8).toFloat()
+            isOutsideTouchable = true
+            isFocusable = true
+        }
+
+        for (item in menuItems) {
+            if (item.isSeparator) {
+                val sep = View(context).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        1
+                    ).apply {
+                        setMargins(0, dpToPx(4), 0, dpToPx(4))
+                    }
+                    setBackgroundColor(Color.parseColor("#2a2a3a"))
+                }
+                popupView.addView(sep)
+            } else {
+                val row = TextView(context).apply {
+                    text = item.title
+                    setTextColor(Color.parseColor("#e2e8f0"))
+                    textSize = 12f
+                    setPadding(dpToPx(16), dpToPx(6), dpToPx(24), dpToPx(6))
+                    gravity = Gravity.CENTER_VERTICAL
+                    val hoverBg = android.graphics.drawable.StateListDrawable().apply {
+                        addState(intArrayOf(android.R.attr.state_pressed), android.graphics.drawable.ColorDrawable(Color.parseColor("#3584e4")))
+                        addState(intArrayOf(android.R.attr.state_focused), android.graphics.drawable.ColorDrawable(Color.parseColor("#3584e4")))
+                        addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+                    }
+                    background = hoverBg
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener {
+                        popupWindow.dismiss()
+                        item.action?.invoke()
+                    }
+                }
+                popupView.addView(row)
+            }
+        }
+
+        popupView.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        popupWindow.showAsDropDown(anchorView, 0, dpToPx(2))
+    }
+
+    private fun showLogoDropdown() {
+        showMacMenu(logoText, listOf(
+            MacMenuItem("About Anodyne Desktop") { showAboutDialog() },
+            MacMenuItem("System Preferences...") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") },
+            MacMenuItem(isSeparator = true),
+            MacMenuItem("Lock Screen") { showToast("Desktop Locked") },
+            MacMenuItem("Shut Down...") { dismiss() }
+        ))
+    }
+
+    private fun showAnodyneDropdown() {
+        showMacMenu(anodyneMenu, listOf(
+            MacMenuItem("Quit Anodyne Presentation") { dismiss() }
+        ))
+    }
+
+    private fun showFileDropdown() {
+        showMacMenu(fileMenu, listOf(
+            MacMenuItem("New Browser Tab") { openOrSwitchTab("web_" + System.currentTimeMillis(), "file:///android_asset/homepage/index.html", "New Tab") },
+            MacMenuItem("Close Active Tab") { getActiveTabItem()?.let { closeTab(it) } },
+            MacMenuItem(isSeparator = true),
+            MacMenuItem("Go to Website URL...") { showGoToUrlDialog() }
+        ))
+    }
+
+    private fun showEditDropdown() {
+        showMacMenu(editMenu, listOf(
+            MacMenuItem("Undo") { getActiveWebView()?.evaluateJavascript("document.execCommand('undo')", null) },
+            MacMenuItem("Redo") { getActiveWebView()?.evaluateJavascript("document.execCommand('redo')", null) },
+            MacMenuItem(isSeparator = true),
+            MacMenuItem("Cut") { getActiveWebView()?.evaluateJavascript("document.execCommand('cut')", null) },
+            MacMenuItem("Copy") { getActiveWebView()?.evaluateJavascript("document.execCommand('copy')", null) },
+            MacMenuItem("Paste") { getActiveWebView()?.evaluateJavascript("document.execCommand('paste')", null) },
+            MacMenuItem("Select All") { getActiveWebView()?.evaluateJavascript("document.execCommand('selectAll')", null) }
+        ))
+    }
+
+    private fun showViewDropdown() {
+        showMacMenu(viewMenu, listOf(
+            MacMenuItem("Reload Page") { getActiveWebView()?.reload() },
+            MacMenuItem("Force Reload") { getActiveWebView()?.apply { clearCache(true); reload() } },
+            MacMenuItem(isSeparator = true),
+            MacMenuItem("Actual Size") { getActiveWebView()?.zoomBy(1.0f) },
+            MacMenuItem("Zoom In") { getActiveWebView()?.zoomIn() },
+            MacMenuItem("Zoom Out") { getActiveWebView()?.zoomOut() }
+        ))
+    }
+
+    private fun showWindowDropdown() {
+        showMacMenu(windowMenu, listOf(
+            MacMenuItem("Bring All to Front") { openOrSwitchTab("home", "file:///android_asset/homepage/index.html", "Dashboard") }
+        ))
+    }
+
+    private fun showHelpDropdown() {
+        showMacMenu(helpMenu, listOf(
+            MacMenuItem("Anodyne Help") { openOrSwitchTab("help", "https://github.com/7CGPA-Labs/Anodyne-Desktop-Android", "Anodyne Help") },
+            MacMenuItem("Send Feedback...") { openOrSwitchTab("feedback", "https://github.com/7CGPA-Labs/Anodyne-Desktop-Android/issues", "Send Feedback") }
+        ))
+    }
+
+    private fun showWifiDropdown() {
+        showMacMenu(wifiTextView, listOf(
+            MacMenuItem("SSID: " + getWifiSSID()),
+            MacMenuItem("IP Address: " + getLocalIpAddress()),
+            MacMenuItem(isSeparator = true),
+            MacMenuItem("Network Settings...") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") }
+        ))
+    }
+
+    private fun showBatteryDropdown() {
+        showMacMenu(batteryTextView, listOf(
+            MacMenuItem("Power Source: " + getBatteryPowerSource()),
+            MacMenuItem("Current Charge: " + batteryTextView.text),
+            MacMenuItem(isSeparator = true),
+            MacMenuItem("Battery Health: Good")
+        ))
+    }
+
+    private fun showClockDropdown() {
+        showMacMenu(clockTextView, listOf(
+            MacMenuItem("Date: " + SimpleDateFormat("EEEE, d MMMM yyyy", Locale.US).format(Date())),
+            MacMenuItem("Timezone: " + java.util.TimeZone.getDefault().displayName)
+        ))
+    }
+
+    private fun getWifiSSID(): String {
+        try {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val info = wifiManager.connectionInfo
+            if (info != null && info.ssid != null && info.ssid != "<unknown ssid>" && info.ssid.isNotEmpty()) {
+                val ssid = info.ssid
+                return if (ssid.startsWith("\"") && ssid.endsWith("\"")) ssid.substring(1, ssid.length - 1) else ssid
+            }
+        } catch (e: Exception) {}
+        return "Unknown SSID"
+    }
+
+    private fun getLocalIpAddress(): String {
+        try {
+            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val intf = interfaces.nextElement()
+                val addrs = intf.inetAddresses
+                while (addrs.hasMoreElements()) {
+                    val addr = addrs.nextElement()
+                    if (!addr.isLoopbackAddress && addr is java.net.Inet4Address) {
+                        return addr.hostAddress ?: "Unknown"
+                    }
+                }
+            }
+        } catch (e: Exception) {}
+        return "127.0.0.1"
+    }
+
+    private fun getBatteryPowerSource(): String {
+        try {
+            val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return "Battery"
+            val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1)
+            if (plugged == BatteryManager.BATTERY_PLUGGED_AC || plugged == BatteryManager.BATTERY_PLUGGED_USB || plugged == BatteryManager.BATTERY_PLUGGED_WIRELESS) {
+                return "Power Adapter"
+            }
+        } catch (e: Exception) {}
+        return "Battery"
+    }
+
+    private fun showAboutDialog() {
+        AlertDialog.Builder(context)
+            .setTitle("About Anodyne Desktop")
+            .setMessage("Anodyne Desktop Virtual Container\nVersion 2.0 (Build 2026.08.01)\n\nCreated to preserve look-and-feel virtualization.\nAuthor: Gagan\n© 2026 7CGPA-Labs. All rights reserved.")
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    private fun showGoToUrlDialog() {
+        val input = EditText(context).apply {
+            hint = "https://example.com"
+            inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setPadding(dpToPx(16), dpToPx(8), dpToPx(16), dpToPx(8))
+        }
+        AlertDialog.Builder(context)
+            .setTitle("Go to Website")
+            .setView(input)
+            .setPositiveButton("Open") { _, _ ->
+                var url = input.text.toString().trim()
+                if (url.isNotEmpty()) {
+                    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                        url = "https://$url"
+                    }
+                    openOrSwitchTab("web_" + System.currentTimeMillis(), url, url)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showToast(msg: String) {
+        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
     }
 
     fun movePresentationCursor(dx: Float, dy: Float) {
@@ -342,14 +610,7 @@ class DesktopPresentation(
             val pct = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
             batteryTextView.text = "$pct%"
 
-            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            val info = wifiManager.connectionInfo
-            if (info != null && info.ssid != null && info.ssid != "<unknown ssid>" && info.ssid.isNotEmpty()) {
-                val ssid = info.ssid
-                wifiTextView.text = if (ssid.startsWith("\"") && ssid.endsWith("\"")) ssid.substring(1, ssid.length - 1) else ssid
-            } else {
-                wifiTextView.text = "Wi-Fi"
-            }
+            wifiTextView.text = getWifiSSID()
         } catch (e: Exception) {
             Log.e(TAG, "Error updating status metrics", e)
         }
@@ -578,6 +839,13 @@ class DesktopPresentation(
     private fun dpToPx(dp: Int): Int {
         val density = context.resources.displayMetrics.density
         return (dp * density).toInt()
+    }
+
+    private fun getActiveTabItem(): TabItem? {
+        if (currentTabIndex in tabsList.indices) {
+            return tabsList[currentTabIndex]
+        }
+        return null
     }
 
     private fun getActiveWebView(): WebView? {
