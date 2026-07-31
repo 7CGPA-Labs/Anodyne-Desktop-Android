@@ -858,42 +858,6 @@ class DesktopPresentation(
 
             tabContainer.addView(tabItem)
         }
-
-        val plusBtn = TextView(context).apply {
-            text = " + "
-            setTextColor(Color.parseColor("#94a3b8"))
-            textSize = 16f
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(
-                dpToPx(26),
-                dpToPx(26)
-            ).apply {
-                gravity = Gravity.CENTER_VERTICAL
-                leftMargin = dpToPx(6)
-                topMargin = dpToPx(6)
-            }
-            val bg = android.graphics.drawable.GradientDrawable().apply {
-                setColor(Color.parseColor("#1a1a24"))
-                cornerRadius = dpToPx(13).toFloat()
-            }
-            background = bg
-            
-            setOnHoverListener { v, event ->
-                if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
-                    (v.background as? android.graphics.drawable.GradientDrawable)?.setColor(Color.parseColor("#334155"))
-                    setTextColor(Color.WHITE)
-                } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
-                    (v.background as? android.graphics.drawable.GradientDrawable)?.setColor(Color.parseColor("#1a1a24"))
-                    setTextColor(Color.parseColor("#94a3b8"))
-                }
-                false
-            }
-            
-            setOnClickListener {
-                openOrSwitchTab("web_" + System.currentTimeMillis(), "file:///android_asset/homepage/index.html", "New Tab")
-            }
-        }
-        tabContainer.addView(plusBtn)
     }
 
     private fun dpToPx(dp: Int): Int {
