@@ -364,6 +364,12 @@ class DesktopPresentation(
             visibility = View.GONE
             setLayerType(View.LAYER_TYPE_HARDWARE, null)
 
+            // Configure Native Scrollbars
+            isScrollbarFadingEnabled = false
+            scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
+            isHorizontalScrollBarEnabled = true
+            isVerticalScrollBarEnabled = true
+
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
@@ -399,6 +405,15 @@ class DesktopPresentation(
                                 document.head.appendChild(style);
                             }
                             document.documentElement.style.setProperty('--ui-scale', '$uiScale');
+                            
+                            // Inject custom styled desktop scrollbars
+                            var sbStyle = document.getElementById('scrollbar-style');
+                            if (!sbStyle) {
+                                sbStyle = document.createElement('style');
+                                sbStyle.id = 'scrollbar-style';
+                                sbStyle.innerHTML = '::-webkit-scrollbar { width: 8px !important; height: 8px !important; } ::-webkit-scrollbar-track { background: #0c0c14 !important; } ::-webkit-scrollbar-thumb { background: #475569 !important; border-radius: 4px !important; } ::-webkit-scrollbar-thumb:hover { background: #64748b !important; }';
+                                document.head.appendChild(sbStyle);
+                            }
                         })();
                         """.trimIndent(),
                         null
