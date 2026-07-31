@@ -3,9 +3,7 @@ document.addEventListener("DOMContentLoaded", function() {
     initializeAnodyneIPCBridge();
     initializeFocus();
     initializeQuote();
-    startCpuMetricsSimulation();
     renderRssFeed();
-    initializeWasmWorker();
 });
 
 // 1. Live Clock & Greeting
@@ -187,15 +185,6 @@ function completeVisualTaskBar(jobId, statusMessage) {
     }, 3000);
 }
 
-// 6. Metric Simulations
-function startCpuMetricsSimulation() {
-    const cpuStat = document.getElementById("cpu-stat");
-    setInterval(function() {
-        const load = 4 + Math.floor(Math.random() * 12);
-        cpuStat.textContent = `CPU: ${load}%`;
-    }, 4000);
-}
-
 // Mock RSS data
 const mockRssData = [
     { title: "Anodyne OS Stable Synthesized", desc: "Our secure, web-first immutable appliance OS is now live with SysV init, zRAM compressed swap, and dm-verity verification hooks." },
@@ -217,58 +206,4 @@ function renderRssFeed() {
     });
 }
 
-// 7. WebAssembly Worker Management
-let wasmWorker = null;
 
-function initializeWasmWorker() {
-    const statusEl = document.getElementById("wasm-status");
-    if (!statusEl) return;
-    
-    try {
-        wasmWorker = new Worker("wasm_worker.js");
-        
-        wasmWorker.onmessage = function(event) {
-            const data = event.data;
-            if (data.status === "ready") {
-                statusEl.textContent = "✓ WASM engine active";
-                statusEl.style.color = "#4caf50";
-            } else if (data.status === "success") {
-                statusEl.textContent = "✓ Calculation complete";
-                statusEl.style.color = "#4caf50";
-                
-                document.getElementById("wasm-result-box").classList.remove("hidden");
-                document.getElementById("wasm-result").textContent = data.result;
-                document.getElementById("wasm-duration").textContent = data.duration;
-                document.getElementById("wasm-calc-btn").disabled = false;
-            } else if (data.status === "error") {
-                statusEl.textContent = "❌ Initialization error";
-                statusEl.style.color = "#ff3333";
-                console.error("WASM Worker error:", data.error);
-            }
-        };
-
-        wasmWorker.onerror = function(err) {
-            statusEl.textContent = "❌ Load error";
-            statusEl.style.color = "#ff3333";
-            console.error("WASM Worker load error:", err);
-        };
-    } catch (e) {
-        statusEl.textContent = "❌ Workers unsupported";
-        statusEl.style.color = "#ff3333";
-        console.error("Failed to spawn WASM Worker:", e);
-    }
-}
-
-function runWasmCalculation() {
-    if (!wasmWorker) return;
-    
-    const inputEl = document.getElementById("wasm-input");
-    const n = parseInt(inputEl.value, 10);
-    if (isNaN(n) || n < 1) return;
-    
-    document.getElementById("wasm-status").textContent = "⚡ Computing in worker...";
-    document.getElementById("wasm-status").style.color = "#ffcc00";
-    document.getElementById("wasm-calc-btn").disabled = true;
-    
-    wasmWorker.postMessage(n);
-}
