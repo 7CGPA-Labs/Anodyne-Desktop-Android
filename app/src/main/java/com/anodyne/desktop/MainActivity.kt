@@ -165,7 +165,7 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(30)
+                dpToPx(22)
             )
             setBackgroundColor(Color.parseColor("#0c0c14"))
             gravity = Gravity.CENTER_VERTICAL
@@ -175,7 +175,7 @@ class MainActivity : AppCompatActivity() {
         logoText = TextView(this).apply {
             text = "⬡"
             setTextColor(Color.parseColor("#f8fafc"))
-            textSize = 14f
+            textSize = 11f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             setOnClickListener { showLogoDropdown() }
         }
@@ -185,8 +185,8 @@ class MainActivity : AppCompatActivity() {
             TextView(this).apply {
                 text = "  $title"
                 setTextColor(Color.parseColor("#94a3b8"))
-                textSize = 11f
-                setPadding(dpToPx(6), 0, dpToPx(6), 0)
+                textSize = 8.5f
+                setPadding(dpToPx(4), 0, dpToPx(4), 0)
                 setOnClickListener { onClick() }
             }
         }
@@ -194,9 +194,9 @@ class MainActivity : AppCompatActivity() {
         anodyneMenu = TextView(this).apply {
             text = "  Anodyne"
             setTextColor(Color.parseColor("#f8fafc"))
-            textSize = 11f
+            textSize = 8.5f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setPadding(dpToPx(6), 0, dpToPx(6), 0)
+            setPadding(dpToPx(4), 0, dpToPx(4), 0)
             setOnClickListener { showAnodyneDropdown() }
         }
         topBar.addView(anodyneMenu)
@@ -225,9 +225,9 @@ class MainActivity : AppCompatActivity() {
         val pinLabel = TextView(this).apply {
             text = "PIN: $accessPin"
             setTextColor(Color.parseColor("#a855f7"))
-            textSize = 11f
+            textSize = 8.5f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setPadding(0, 0, dpToPx(12), 0)
+            setPadding(0, 0, dpToPx(8), 0)
         }
         topBar.addView(pinLabel)
 
@@ -235,8 +235,8 @@ class MainActivity : AppCompatActivity() {
         val modeToggle = TextView(this).apply {
             text = "📱 Touch"
             setTextColor(Color.parseColor("#f8fafc"))
-            textSize = 11f
-            setPadding(dpToPx(8), dpToPx(2), dpToPx(8), dpToPx(2))
+            textSize = 8.5f
+            setPadding(dpToPx(4), dpToPx(1), dpToPx(4), dpToPx(1))
             setBackgroundColor(Color.parseColor("#1a1a24"))
             setOnClickListener {
                 toggleInputModeText(this)
@@ -248,8 +248,8 @@ class MainActivity : AppCompatActivity() {
         val keyboardToggle = TextView(this).apply {
             text = "⌨️"
             setTextColor(Color.parseColor("#94a3b8"))
-            textSize = 11f
-            setPadding(dpToPx(8), 0, dpToPx(4), 0)
+            textSize = 8.5f
+            setPadding(dpToPx(4), 0, dpToPx(2), 0)
             setOnClickListener {
                 if (virtualKeyboardPanel.visibility == View.VISIBLE) {
                     hideVirtualKeyboard()
@@ -266,8 +266,8 @@ class MainActivity : AppCompatActivity() {
         spotlightBtn = TextView(this).apply {
             text = "🔍"
             setTextColor(Color.parseColor("#94a3b8"))
-            textSize = 11f
-            setPadding(dpToPx(10), 0, dpToPx(10), 0)
+            textSize = 8.5f
+            setPadding(dpToPx(5), 0, dpToPx(5), 0)
             setOnClickListener { toggleSpotlightSearch() }
         }
         topBar.addView(spotlightBtn)
@@ -275,8 +275,8 @@ class MainActivity : AppCompatActivity() {
         wifiTextView = TextView(this).apply {
             text = "Wi-Fi"
             setTextColor(Color.parseColor("#94a3b8"))
-            textSize = 11f
-            setPadding(dpToPx(4), 0, 0, 0)
+            textSize = 8.5f
+            setPadding(dpToPx(2), 0, 0, 0)
             setOnClickListener { showWifiDropdown() }
         }
         topBar.addView(wifiTextView)
@@ -284,15 +284,15 @@ class MainActivity : AppCompatActivity() {
         batteryTextView = TextView(this).apply {
             text = "100%"
             setTextColor(Color.parseColor("#94a3b8"))
-            textSize = 11f
-            setPadding(dpToPx(8), 0, dpToPx(8), 0)
+            textSize = 8.5f
+            setPadding(dpToPx(4), 0, dpToPx(4), 0)
             setOnClickListener { showBatteryDropdown() }
         }
         topBar.addView(batteryTextView)
 
         clockTextView = TextView(this).apply {
             setTextColor(Color.parseColor("#f8fafc"))
-            textSize = 11f
+            textSize = 8.5f
             setOnClickListener { showClockDropdown() }
         }
         topBar.addView(clockTextView)
@@ -308,7 +308,7 @@ class MainActivity : AppCompatActivity() {
         tabScroll = HorizontalScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(40)
+                dpToPx(28)
             )
             isHorizontalScrollBarEnabled = false
             setBackgroundColor(Color.parseColor("#0c0c14"))
@@ -813,7 +813,7 @@ class MainActivity : AppCompatActivity() {
                     super.onPageFinished(view, url)
                     Log.d(TAG, "Page finished loading: $url")
 
-                    val targetWidth = 1280
+                    val targetWidth = 1600
                     view?.evaluateJavascript(
                         """
                         (function() {
@@ -969,18 +969,18 @@ class MainActivity : AppCompatActivity() {
             val tabItem = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(
-                    dpToPx(140),
+                    dpToPx(100),
                     LinearLayout.LayoutParams.MATCH_PARENT
                 ).apply {
-                    topMargin = dpToPx(6)
+                    topMargin = dpToPx(3)
                     rightMargin = dpToPx(2)
                 }
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dpToPx(12), 0, dpToPx(8), 0)
+                setPadding(dpToPx(8), 0, dpToPx(6), 0)
                 
                 val tabDrawable = android.graphics.drawable.GradientDrawable().apply {
                     setColor(Color.parseColor(if (isActive) "#1e1e2e" else "#0c0c14"))
-                    val r = dpToPx(8).toFloat()
+                    val r = dpToPx(5).toFloat()
                     cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
                 }
                 background = tabDrawable
@@ -993,7 +993,7 @@ class MainActivity : AppCompatActivity() {
             val titleText = TextView(this).apply {
                 text = tab.title
                 setTextColor(Color.parseColor(if (isActive) "#f8fafc" else "#94a3b8"))
-                textSize = 11f
+                textSize = 8.5f
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
                 layoutParams = LinearLayout.LayoutParams(
@@ -1008,12 +1008,12 @@ class MainActivity : AppCompatActivity() {
                 val closeBtn = TextView(this).apply {
                     text = " × "
                     setTextColor(Color.parseColor(if (isActive) "#94a3b8" else "#64748b"))
-                    textSize = 14f
+                    textSize = 10f
                     gravity = Gravity.CENTER
-                    setPadding(dpToPx(4), dpToPx(2), dpToPx(4), dpToPx(2))
+                    setPadding(dpToPx(2), dpToPx(1), dpToPx(2), dpToPx(1))
                     val btnBg = android.graphics.drawable.GradientDrawable().apply {
                         setColor(Color.TRANSPARENT)
-                        cornerRadius = dpToPx(8).toFloat()
+                        cornerRadius = dpToPx(5).toFloat()
                     }
                     background = btnBg
                     
