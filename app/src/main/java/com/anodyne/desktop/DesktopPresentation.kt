@@ -404,7 +404,7 @@ class DesktopPresentation(
                                 style.innerHTML = 'html { zoom: var(--ui-scale, 1.0); }';
                                 document.head.appendChild(style);
                             }
-                            document.documentElement.style.setProperty('--ui-scale', '$uiScale');
+                            document.documentElement.style.setProperty('--ui-scale', '1.0');
                             
                             // Inject custom styled desktop scrollbars
                             var sbStyle = document.getElementById('scrollbar-style');
