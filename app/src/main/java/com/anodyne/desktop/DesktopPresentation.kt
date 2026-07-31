@@ -395,7 +395,7 @@ class DesktopPresentation(
                                 meta.name = 'viewport';
                                 document.head.appendChild(meta);
                             }
-                            meta.setAttribute('content', 'width=$targetWidth, initial-scale=1.0');
+                            meta.setAttribute('content', 'width=$targetWidth, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no');
                             
                             var style = document.getElementById('zoom-style');
                             if (!style) {

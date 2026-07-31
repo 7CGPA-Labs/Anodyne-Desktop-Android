@@ -486,7 +486,8 @@ class MainActivity : AppCompatActivity() {
                                 meta.name = 'viewport';
                                 document.head.appendChild(meta);
                             }
-                            meta.setAttribute('content', 'width=$targetWidth, initial-scale=' + (window.screen.width / $targetWidth) + ', minimum-scale=0.1, maximum-scale=2.0');
+                            var scale = window.screen.width / $targetWidth;
+                            meta.setAttribute('content', 'width=$targetWidth, initial-scale=' + scale + ', minimum-scale=' + scale + ', maximum-scale=' + scale + ', user-scalable=no');
                             
                             var style = document.getElementById('zoom-style');
                             if (!style) {

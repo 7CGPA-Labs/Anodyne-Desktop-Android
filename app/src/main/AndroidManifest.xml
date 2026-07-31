@@ -29,6 +29,7 @@
             android:name="com.anodyne.desktop.MainActivity"
             android:exported="true"
             android:screenOrientation="landscape"
+            android:windowSoftInputMode="adjustNothing"
             android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|screenLayout|density"
             android:theme="@style/Theme.AnodyneDesktop">
             <intent-filter>
