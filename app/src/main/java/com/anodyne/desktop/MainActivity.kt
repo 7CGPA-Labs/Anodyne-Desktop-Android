@@ -52,8 +52,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabContainer: LinearLayout
     private lateinit var webViewContainer: FrameLayout
 
-    // Cursor & Touchpad UI elements
-    private lateinit var viewportContainer: FrameLayout
+    // Cursor & Touchpad UI elements (Covering the entire screen)
     private lateinit var touchpadOverlay: TouchpadLayout
     private lateinit var cursorView: ImageView
     private var cursorX = 0f
@@ -201,8 +200,8 @@ class MainActivity : AppCompatActivity() {
                     isTrackpadMode = true
                     touchpadOverlay.visibility = View.VISIBLE
                     cursorView.visibility = View.VISIBLE
-                    cursorX = webViewContainer.width / 2f
-                    cursorY = webViewContainer.height / 2f
+                    cursorX = workspaceContainer.width / 2f
+                    cursorY = workspaceContainer.height / 2f
                     updateCursorViewPosition()
                 }
             }
@@ -263,23 +262,18 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(Color.parseColor("#1a1a24"))
         })
 
-        // 3. Web viewport frame layout with custom overlays
-        viewportContainer = FrameLayout(this).apply {
+        // 3. Web viewport frame layout
+        webViewContainer = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,
                 1f
             )
         }
+        rootLayout.addView(webViewContainer)
+        workspaceContainer.addView(rootLayout)
 
-        webViewContainer = FrameLayout(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            )
-        }
-        viewportContainer.addView(webViewContainer)
-
+        // 4. Touchpad overlay covering the whole screen
         touchpadOverlay = TouchpadLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -287,9 +281,9 @@ class MainActivity : AppCompatActivity() {
             )
             visibility = View.GONE
         }
-        viewportContainer.addView(touchpadOverlay)
+        workspaceContainer.addView(touchpadOverlay)
 
-        // Programmatically drawn mouse arrow cursor
+        // Programmatically drawn mouse arrow cursor overlay
         cursorView = ImageView(this).apply {
             val bmp = Bitmap.createBitmap(16, 24, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bmp)
@@ -324,10 +318,7 @@ class MainActivity : AppCompatActivity() {
             )
             visibility = View.GONE
         }
-        viewportContainer.addView(cursorView)
-
-        rootLayout.addView(viewportContainer)
-        workspaceContainer.addView(rootLayout)
+        workspaceContainer.addView(cursorView)
 
         setContentView(workspaceContainer)
 
@@ -394,11 +385,10 @@ class MainActivity : AppCompatActivity() {
         if (isCasting) return
         isCasting = true
 
-        // Hide standard rootLayout to show only pitch black OLED trackpad
         rootLayout.visibility = View.GONE
 
         castingTrackpad = TouchpadLayout(this).apply {
-            setBackgroundColor(Color.BLACK) // Pitch black AMOLED
+            setBackgroundColor(Color.BLACK)
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
@@ -696,8 +686,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun moveVirtualCursor(dx: Float, dy: Float) {
-        val maxW = viewportContainer.width.toFloat()
-        val maxH = viewportContainer.height.toFloat()
+        val maxW = if (workspaceContainer.width > 0) workspaceContainer.width.toFloat() else resources.displayMetrics.widthPixels.toFloat()
+        val maxH = if (workspaceContainer.height > 0) workspaceContainer.height.toFloat() else resources.displayMetrics.heightPixels.toFloat()
 
         cursorX = (cursorX + dx).coerceIn(0f, maxW)
         cursorY = (cursorY + dy).coerceIn(0f, maxH)
@@ -715,39 +705,62 @@ class MainActivity : AppCompatActivity() {
         val webView = getActiveWebView() ?: return
         val cx = cursorX
         val cy = cursorY
+        val offset = topBar.height + tabScroll.height + dpToPx(2)
 
-        val downTime = SystemClock.uptimeMillis()
-        val eventTime = SystemClock.uptimeMillis()
-        val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, cy, 0).apply {
-            source = InputDevice.SOURCE_MOUSE
+        if (cy >= offset) {
+            val relativeY = cy - offset
+            val downTime = SystemClock.uptimeMillis()
+            val eventTime = SystemClock.uptimeMillis()
+            val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, relativeY, 0).apply {
+                source = InputDevice.SOURCE_MOUSE
+            }
+            webView.dispatchGenericMotionEvent(hoverEvent)
+            hoverEvent.recycle()
         }
-        webView.dispatchGenericMotionEvent(hoverEvent)
-        hoverEvent.recycle()
     }
 
     private fun performClickAtCursor(isRightClick: Boolean) {
-        val webView = getActiveWebView() ?: return
+        val webView = getActiveWebView()
         val cx = cursorX
         val cy = cursorY
+        val offset = topBar.height + tabScroll.height + dpToPx(2)
 
-        if (isRightClick) {
-            webView.evaluateJavascript(
-                "var el = document.elementFromPoint($cx, $cy); if (el) { el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, button: 2, clientX: $cx, clientY: $cy })); }",
-                null
-            )
+        if (webView != null && cy >= offset) {
+            val relativeY = cy - offset
+            if (isRightClick) {
+                webView.evaluateJavascript(
+                    "var el = document.elementFromPoint($cx, $relativeY); if (el) { el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, button: 2, clientX: $cx, clientY: $relativeY })); }",
+                    null
+                )
+            } else {
+                val downTime = SystemClock.uptimeMillis()
+                val eventTime = SystemClock.uptimeMillis()
+                val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, relativeY, 0).apply {
+                    source = InputDevice.SOURCE_MOUSE
+                }
+                val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, relativeY, 0).apply {
+                    source = InputDevice.SOURCE_MOUSE
+                }
+                webView.dispatchTouchEvent(downEvent)
+                webView.dispatchTouchEvent(upEvent)
+                downEvent.recycle()
+                upEvent.recycle()
+            }
         } else {
-            val downTime = SystemClock.uptimeMillis()
-            val eventTime = SystemClock.uptimeMillis()
-            val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, cy, 0).apply {
-                source = InputDevice.SOURCE_MOUSE
+            if (!isRightClick) {
+                val downTime = SystemClock.uptimeMillis()
+                val eventTime = SystemClock.uptimeMillis()
+                val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, cy, 0).apply {
+                    source = InputDevice.SOURCE_MOUSE
+                }
+                val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, cy, 0).apply {
+                    source = InputDevice.SOURCE_MOUSE
+                }
+                rootLayout.dispatchTouchEvent(downEvent)
+                rootLayout.dispatchTouchEvent(upEvent)
+                downEvent.recycle()
+                upEvent.recycle()
             }
-            val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, cy, 0).apply {
-                source = InputDevice.SOURCE_MOUSE
-            }
-            webView.dispatchTouchEvent(downEvent)
-            webView.dispatchTouchEvent(upEvent)
-            downEvent.recycle()
-            upEvent.recycle()
         }
     }
 
@@ -794,7 +807,6 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    // Touchpad gesture interception FrameLayout
     inner class TouchpadLayout(context: Context) : FrameLayout(context) {
         private var lastX = 0f
         private var lastY = 0f

@@ -263,30 +263,47 @@ class DesktopPresentation(
 
     fun performPresentationClick(isRightClick: Boolean) {
         clockHandler.post {
-            val webView = getActiveWebView() ?: return@post
-            
-            // Adjust cursor coordinates to be relative to the WebView viewport
+            val webView = getActiveWebView()
             val cx = cursorX
-            val cy = cursorY - (topBar.height + tabScroll.height + dpToPx(2)) // Account for TopBar/TabBar heights
-            
-            if (isRightClick) {
-                webView.evaluateJavascript(
-                    "var el = document.elementFromPoint($cx, $cy); if (el) { el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, button: 2, clientX: $cx, clientY: $cy })); }",
-                    null
-                )
+            val cy = cursorY
+            val offset = topBar.height + tabScroll.height + dpToPx(2)
+
+            if (webView != null && cy >= offset) {
+                val relativeY = cy - offset
+                if (isRightClick) {
+                    webView.evaluateJavascript(
+                        "var el = document.elementFromPoint($cx, $relativeY); if (el) { el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, button: 2, clientX: $cx, clientY: $relativeY })); }",
+                        null
+                    )
+                } else {
+                    val downTime = SystemClock.uptimeMillis()
+                    val eventTime = SystemClock.uptimeMillis()
+                    val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, relativeY, 0).apply {
+                        source = InputDevice.SOURCE_MOUSE
+                    }
+                    val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, relativeY, 0).apply {
+                        source = InputDevice.SOURCE_MOUSE
+                    }
+                    webView.dispatchTouchEvent(downEvent)
+                    webView.dispatchTouchEvent(upEvent)
+                    downEvent.recycle()
+                    upEvent.recycle()
+                }
             } else {
-                val downTime = SystemClock.uptimeMillis()
-                val eventTime = SystemClock.uptimeMillis()
-                val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, cy, 0).apply {
-                    source = InputDevice.SOURCE_MOUSE
+                if (!isRightClick) {
+                    val downTime = SystemClock.uptimeMillis()
+                    val eventTime = SystemClock.uptimeMillis()
+                    val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, cy, 0).apply {
+                        source = InputDevice.SOURCE_MOUSE
+                    }
+                    val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, cy, 0).apply {
+                        source = InputDevice.SOURCE_MOUSE
+                    }
+                    rootLayout.dispatchTouchEvent(downEvent)
+                    rootLayout.dispatchTouchEvent(upEvent)
+                    downEvent.recycle()
+                    upEvent.recycle()
                 }
-                val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, cy, 0).apply {
-                    source = InputDevice.SOURCE_MOUSE
-                }
-                webView.dispatchTouchEvent(downEvent)
-                webView.dispatchTouchEvent(upEvent)
-                downEvent.recycle()
-                upEvent.recycle()
             }
         }
     }
@@ -301,15 +318,19 @@ class DesktopPresentation(
     private fun dispatchHoverAtCursor() {
         val webView = getActiveWebView() ?: return
         val cx = cursorX
-        val cy = cursorY - (topBar.height + tabScroll.height + dpToPx(2))
+        val cy = cursorY
+        val offset = topBar.height + tabScroll.height + dpToPx(2)
 
-        val downTime = SystemClock.uptimeMillis()
-        val eventTime = SystemClock.uptimeMillis()
-        val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, cy, 0).apply {
-            source = InputDevice.SOURCE_MOUSE
+        if (cy >= offset) {
+            val relativeY = cy - offset
+            val downTime = SystemClock.uptimeMillis()
+            val eventTime = SystemClock.uptimeMillis()
+            val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, relativeY, 0).apply {
+                source = InputDevice.SOURCE_MOUSE
+            }
+            webView.dispatchGenericMotionEvent(hoverEvent)
+            hoverEvent.recycle()
         }
-        webView.dispatchGenericMotionEvent(hoverEvent)
-        hoverEvent.recycle()
     }
 
     private fun updateClockAndStatus() {
