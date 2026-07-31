@@ -111,6 +111,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var batteryTextView: TextView
     private lateinit var clockTextView: TextView
 
+    // Custom dropdown layouts inside workspaceContainer
+    private var activeDropdownView: View? = null
+    private var activeSubmenuView: View? = null
+
     private lateinit var displayManager: DisplayManager
     private var presentation: DesktopPresentation? = null
 
@@ -479,6 +483,8 @@ class MainActivity : AppCompatActivity() {
 
     // Lubuntu LXQt-style App Drawer cascading menu implementation
     private fun showLxqtAppDrawer(anchorView: View) {
+        dismissActiveDropdown()
+
         val popupView = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dpToPx(4), 0, dpToPx(4))
@@ -488,17 +494,7 @@ class MainActivity : AppCompatActivity() {
                 cornerRadius = dpToPx(8).toFloat()
             }
             background = borderDrawable
-        }
-
-        val popupWindow = android.widget.PopupWindow(
-            popupView,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            true
-        ).apply {
             elevation = dpToPx(8).toFloat()
-            isOutsideTouchable = true
-            isFocusable = true
         }
 
         val menuItems = listOf(
@@ -536,6 +532,18 @@ class MainActivity : AppCompatActivity() {
                     }
                     background = hoverBg
                     isClickable = true
+
+                    setOnHoverListener { v, event ->
+                        val tv = v as? TextView
+                        if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
+                            tv?.setBackgroundColor(Color.parseColor("#3584e4"))
+                            tv?.setTextColor(Color.WHITE)
+                        } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
+                            tv?.setBackgroundColor(Color.TRANSPARENT)
+                            tv?.setTextColor(Color.parseColor("#e2e8f0"))
+                        }
+                        false
+                    }
                     
                     setOnClickListener {
                         if (item.title.contains("▶")) {
@@ -559,9 +567,20 @@ class MainActivity : AppCompatActivity() {
                                 )
                                 else -> emptyList()
                             }
-                            showSubMenu(this, subItems)
+                            
+                            val loc = IntArray(2)
+                            this.getLocationOnScreen(loc)
+                            val mainX = activeDropdownView?.x ?: 0f
+                            val mainW = activeDropdownView?.width ?: 0
+                            
+                            activeSubmenuView?.let { sub ->
+                                workspaceContainer.removeView(sub)
+                                activeSubmenuView = null
+                            }
+                            
+                            showMacMenu(this, subItems, isSubMenu = true, subMenuX = mainX + mainW + dpToPx(4), subMenuY = loc[1].toFloat())
                         } else {
-                            popupWindow.dismiss()
+                            dismissActiveDropdown()
                             item.action?.invoke()
                         }
                     }
@@ -570,11 +589,19 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        popupView.measure(
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        popupView.layoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
         )
-        popupWindow.showAsDropDown(anchorView, 0, dpToPx(2))
+        workspaceContainer.addView(popupView)
+
+        popupView.post {
+            val location = IntArray(2)
+            anchorView.getLocationOnScreen(location)
+            popupView.x = location[0].toFloat()
+            popupView.y = (location[1] + anchorView.height + dpToPx(2)).toFloat()
+            activeDropdownView = popupView
+        }
     }
 
     private fun showSubMenu(anchorView: View, items: List<MacMenuItem>) {
@@ -618,8 +645,10 @@ class MainActivity : AppCompatActivity() {
         popupWindow.showAtLocation(anchorView, Gravity.NO_GRAVITY, location[0] + anchorView.width + dpToPx(4), location[1])
     }
 
-    // GNOME-style Date & Time drop-down Calendar and Notification Area
+    // GNOME-style Date & Time drop-down Calendar and Notification Area inside workspaceContainer
     private fun showGnomeCalendarDropdown(anchorView: View) {
+        dismissActiveDropdown()
+
         val popupWidth = dpToPx(480)
         val popupHeight = dpToPx(280)
         
@@ -632,17 +661,7 @@ class MainActivity : AppCompatActivity() {
                 cornerRadius = dpToPx(12).toFloat()
             }
             background = borderDrawable
-        }
-
-        val popupWindow = android.widget.PopupWindow(
-            rootDropdown,
-            popupWidth,
-            popupHeight,
-            true
-        ).apply {
             elevation = dpToPx(16).toFloat()
-            isOutsideTouchable = true
-            isFocusable = true
         }
 
         // --- Left Column: Notifications ---
@@ -828,7 +847,19 @@ class MainActivity : AppCompatActivity() {
         calendarLayout.addView(daysGrid)
         rootDropdown.addView(calendarLayout)
 
-        popupWindow.showAsDropDown(anchorView, -dpToPx(180), dpToPx(2))
+        rootDropdown.layoutParams = FrameLayout.LayoutParams(
+            popupWidth,
+            popupHeight
+        )
+        workspaceContainer.addView(rootDropdown)
+
+        rootDropdown.post {
+            val location = IntArray(2)
+            anchorView.getLocationOnScreen(location)
+            rootDropdown.x = (location[0] - dpToPx(180)).toFloat().coerceAtLeast(0f)
+            rootDropdown.y = (location[1] + anchorView.height + dpToPx(2)).toFloat()
+            activeDropdownView = rootDropdown
+        }
     }
 
     // Dynamic TopBar menu updater according to focused PWA
@@ -1016,8 +1047,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // macOS Dropdown UI Helper
-    private fun showMacMenu(anchorView: View, menuItems: List<MacMenuItem>) {
+    // View-based Dropdown Menu system inside workspaceContainer (Trackpad hover & click friendly)
+    private fun showMacMenu(anchorView: View, menuItems: List<MacMenuItem>, isSubMenu: Boolean = false, subMenuX: Float = 0f, subMenuY: Float = 0f) {
+        if (!isSubMenu) {
+            dismissActiveDropdown()
+        }
+
         val popupView = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dpToPx(4), 0, dpToPx(4))
@@ -1027,17 +1062,7 @@ class MainActivity : AppCompatActivity() {
                 cornerRadius = dpToPx(8).toFloat()
             }
             background = borderDrawable
-        }
-
-        val popupWindow = android.widget.PopupWindow(
-            popupView,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            true
-        ).apply {
             elevation = dpToPx(8).toFloat()
-            isOutsideTouchable = true
-            isFocusable = true
         }
 
         for (item in menuItems) {
@@ -1061,14 +1086,25 @@ class MainActivity : AppCompatActivity() {
                     gravity = Gravity.CENTER_VERTICAL
                     val hoverBg = android.graphics.drawable.StateListDrawable().apply {
                         addState(intArrayOf(android.R.attr.state_pressed), android.graphics.drawable.ColorDrawable(Color.parseColor("#3584e4")))
-                        addState(intArrayOf(android.R.attr.state_focused), android.graphics.drawable.ColorDrawable(Color.parseColor("#3584e4")))
                         addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
                     }
                     background = hoverBg
                     isClickable = true
-                    isFocusable = true
+
+                    setOnHoverListener { v, event ->
+                        val tv = v as? TextView
+                        if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
+                            tv?.setBackgroundColor(Color.parseColor("#3584e4"))
+                            tv?.setTextColor(Color.WHITE)
+                        } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
+                            tv?.setBackgroundColor(Color.TRANSPARENT)
+                            tv?.setTextColor(Color.parseColor("#e2e8f0"))
+                        }
+                        false
+                    }
+
                     setOnClickListener {
-                        popupWindow.dismiss()
+                        dismissActiveDropdown()
                         item.action?.invoke()
                     }
                 }
@@ -1076,11 +1112,36 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        popupView.measure(
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        popupView.layoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
         )
-        popupWindow.showAsDropDown(anchorView, 0, dpToPx(2))
+        workspaceContainer.addView(popupView)
+
+        popupView.post {
+            if (isSubMenu) {
+                popupView.x = subMenuX
+                popupView.y = subMenuY
+                activeSubmenuView = popupView
+            } else {
+                val location = IntArray(2)
+                anchorView.getLocationOnScreen(location)
+                popupView.x = location[0].toFloat()
+                popupView.y = (location[1] + anchorView.height + dpToPx(2)).toFloat()
+                activeDropdownView = popupView
+            }
+        }
+    }
+
+    private fun dismissActiveDropdown() {
+        activeSubmenuView?.let {
+            workspaceContainer.removeView(it)
+            activeSubmenuView = null
+        }
+        activeDropdownView?.let {
+            workspaceContainer.removeView(it)
+            activeDropdownView = null
+        }
     }
 
     private fun showWifiDropdown() {
@@ -1186,6 +1247,13 @@ class MainActivity : AppCompatActivity() {
     private fun getActiveTabItem(): TabItem? {
         if (currentTabIndex in tabsList.indices) {
             return tabsList[currentTabIndex]
+        }
+        return null
+    }
+
+    private fun getActiveWebView(): WebView? {
+        if (currentTabIndex in tabsList.indices) {
+            return tabsList[currentTabIndex].webView
         }
         return null
     }
@@ -1910,9 +1978,45 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun dispatchHoverAtCursor() {
-        val webView = getActiveWebView() ?: return
         val cx = cursorX
         val cy = cursorY
+        
+        // Dispatch hover events to custom menu overlays to trigger button hover colors dynamically
+        if (activeDropdownView != null) {
+            val menu = activeDropdownView!!
+            val mx = menu.x
+            val my = menu.y
+            val mw = menu.width
+            val mh = menu.height
+            if (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh) {
+                val downTime = SystemClock.uptimeMillis()
+                val eventTime = SystemClock.uptimeMillis()
+                val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, cy, 0).apply {
+                    source = InputDevice.SOURCE_MOUSE
+                }
+                workspaceContainer.dispatchGenericMotionEvent(hoverEvent)
+                hoverEvent.recycle()
+                return
+            }
+        }
+        activeSubmenuView?.let { sub ->
+            val sx = sub.x
+            val sy = sub.y
+            val sw = sub.width
+            val sh = sub.height
+            if (cx >= sx && cx <= sx + sw && cy >= sy && cy <= sy + sh) {
+                val downTime = SystemClock.uptimeMillis()
+                val eventTime = SystemClock.uptimeMillis()
+                val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, cy, 0).apply {
+                    source = InputDevice.SOURCE_MOUSE
+                }
+                workspaceContainer.dispatchGenericMotionEvent(hoverEvent)
+                hoverEvent.recycle()
+                return
+            }
+        }
+
+        val webView = getActiveWebView() ?: return
         val offset = topBar.height + tabScroll.height + dpToPx(2)
 
         if (cy >= offset) {
@@ -1932,6 +2036,47 @@ class MainActivity : AppCompatActivity() {
         val cx = cursorX
         val cy = cursorY
         val offset = topBar.height + tabScroll.height + dpToPx(2)
+
+        // Intercept dropdown outside taps
+        if (activeDropdownView != null) {
+            val menu = activeDropdownView!!
+            val mx = menu.x
+            val my = menu.y
+            val mw = menu.width
+            val mh = menu.height
+            
+            val inMain = (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh)
+            
+            var inSub = false
+            activeSubmenuView?.let { sub ->
+                val sx = sub.x
+                val sy = sub.y
+                val sw = sub.width
+                val sh = sub.height
+                inSub = (cx >= sx && cx <= sx + sw && cy >= sy && cy <= sy + sh)
+            }
+            
+            if (!inMain && !inSub) {
+                dismissActiveDropdown()
+                return
+            } else {
+                if (!isRightClick) {
+                    val downTime = SystemClock.uptimeMillis()
+                    val eventTime = SystemClock.uptimeMillis()
+                    val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, cy, 0).apply {
+                        source = InputDevice.SOURCE_MOUSE
+                    }
+                    val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, cy, 0).apply {
+                        source = InputDevice.SOURCE_MOUSE
+                    }
+                    workspaceContainer.dispatchTouchEvent(downEvent)
+                    workspaceContainer.dispatchTouchEvent(upEvent)
+                    downEvent.recycle()
+                    upEvent.recycle()
+                }
+                return
+            }
+        }
 
         if (webView != null && cy >= offset) {
             val relativeY = cy - offset
@@ -1989,13 +2134,6 @@ class MainActivity : AppCompatActivity() {
                     or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
             )
         }
-    }
-
-    private fun getActiveWebView(): WebView? {
-        if (currentTabIndex in tabsList.indices) {
-            return tabsList[currentTabIndex].webView
-        }
-        return null
     }
 
     private fun dpToPx(dp: Int): Int {

@@ -102,6 +102,10 @@ class DesktopPresentation(
     private lateinit var batteryTextView: TextView
     private lateinit var clockTextView: TextView
 
+    // Custom dropdown layouts inside workspaceContainer
+    private var activeDropdownView: View? = null
+    private var activeSubmenuView: View? = null
+
     private val clockHandler = Handler(Looper.getMainLooper())
     private val clockRunnable = object : Runnable {
         override fun run() {
@@ -308,6 +312,8 @@ class DesktopPresentation(
 
     // Lubuntu LXQt-style App Drawer cascading menu implementation
     private fun showLxqtAppDrawer(anchorView: View) {
+        dismissActiveDropdown()
+
         val popupView = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dpToPx(4), 0, dpToPx(4))
@@ -317,17 +323,7 @@ class DesktopPresentation(
                 cornerRadius = dpToPx(8).toFloat()
             }
             background = borderDrawable
-        }
-
-        val popupWindow = android.widget.PopupWindow(
-            popupView,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            true
-        ).apply {
             elevation = dpToPx(8).toFloat()
-            isOutsideTouchable = true
-            isFocusable = true
         }
 
         val menuItems = listOf(
@@ -364,6 +360,18 @@ class DesktopPresentation(
                     }
                     background = hoverBg
                     isClickable = true
+
+                    setOnHoverListener { v, event ->
+                        val tv = v as? TextView
+                        if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
+                            tv?.setBackgroundColor(Color.parseColor("#3584e4"))
+                            tv?.setTextColor(Color.WHITE)
+                        } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
+                            tv?.setBackgroundColor(Color.TRANSPARENT)
+                            tv?.setTextColor(Color.parseColor("#e2e8f0"))
+                        }
+                        false
+                    }
                     
                     setOnClickListener {
                         if (item.title.contains("▶")) {
@@ -386,9 +394,20 @@ class DesktopPresentation(
                                 )
                                 else -> emptyList()
                             }
-                            showSubMenu(this, subItems)
+                            
+                            val loc = IntArray(2)
+                            this.getLocationOnScreen(loc)
+                            val mainX = activeDropdownView?.x ?: 0f
+                            val mainW = activeDropdownView?.width ?: 0
+                            
+                            activeSubmenuView?.let { sub ->
+                                workspaceContainer.removeView(sub)
+                                activeSubmenuView = null
+                            }
+                            
+                            showMacMenu(this, subItems, isSubMenu = true, subMenuX = mainX + mainW + dpToPx(4), subMenuY = loc[1].toFloat())
                         } else {
-                            popupWindow.dismiss()
+                            dismissActiveDropdown()
                             item.action?.invoke()
                         }
                     }
@@ -397,56 +416,28 @@ class DesktopPresentation(
             }
         }
 
-        popupView.measure(
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        popupView.layoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
         )
-        popupWindow.showAsDropDown(anchorView, 0, dpToPx(2))
+        workspaceContainer.addView(popupView)
+
+        popupView.post {
+            val location = IntArray(2)
+            anchorView.getLocationOnScreen(location)
+            popupView.x = location[0].toFloat()
+            popupView.y = (location[1] + anchorView.height + dpToPx(2)).toFloat()
+            activeDropdownView = popupView
+        }
     }
 
     private fun showSubMenu(anchorView: View, items: List<MacMenuItem>) {
-        val popupView = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, dpToPx(4), 0, dpToPx(4))
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(Color.parseColor("#12121a"))
-                setStroke(1, Color.parseColor("#2a2a3a"))
-                cornerRadius = dpToPx(8).toFloat()
-            }
-        }
-        val popupWindow = android.widget.PopupWindow(
-            popupView,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            true
-        ).apply {
-            elevation = dpToPx(12).toFloat()
-            isOutsideTouchable = true
-        }
-        for (item in items) {
-            val row = TextView(context).apply {
-                text = item.title
-                setTextColor(Color.parseColor("#e2e8f0"))
-                textSize = 11f
-                setPadding(dpToPx(16), dpToPx(6), dpToPx(24), dpToPx(6))
-                background = android.graphics.drawable.StateListDrawable().apply {
-                    addState(intArrayOf(android.R.attr.state_pressed), android.graphics.drawable.ColorDrawable(Color.parseColor("#3584e4")))
-                    addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-                }
-                setOnClickListener {
-                    popupWindow.dismiss()
-                    item.action?.invoke()
-                }
-            }
-            popupView.addView(row)
-        }
-        val location = IntArray(2)
-        anchorView.getLocationOnScreen(location)
-        popupWindow.showAtLocation(anchorView, Gravity.NO_GRAVITY, location[0] + anchorView.width + dpToPx(4), location[1])
     }
 
-    // GNOME-style Calendar & Notification panel for secondary presentation screens
+    // GNOME-style Calendar & Notification panel for secondary presentation screens inside workspaceContainer
     private fun showGnomeCalendarDropdown(anchorView: View) {
+        dismissActiveDropdown()
+
         val popupWidth = dpToPx(480)
         val popupHeight = dpToPx(280)
         
@@ -459,17 +450,7 @@ class DesktopPresentation(
                 cornerRadius = dpToPx(12).toFloat()
             }
             background = borderDrawable
-        }
-
-        val popupWindow = android.widget.PopupWindow(
-            rootDropdown,
-            popupWidth,
-            popupHeight,
-            true
-        ).apply {
             elevation = dpToPx(16).toFloat()
-            isOutsideTouchable = true
-            isFocusable = true
         }
 
         // Left Column: Notifications
@@ -654,7 +635,19 @@ class DesktopPresentation(
         calendarLayout.addView(daysGrid)
         rootDropdown.addView(calendarLayout)
 
-        popupWindow.showAsDropDown(anchorView, -dpToPx(180), dpToPx(2))
+        rootDropdown.layoutParams = FrameLayout.LayoutParams(
+            popupWidth,
+            popupHeight
+        )
+        workspaceContainer.addView(rootDropdown)
+
+        rootDropdown.post {
+            val location = IntArray(2)
+            anchorView.getLocationOnScreen(location)
+            rootDropdown.x = (location[0] - dpToPx(180)).toFloat().coerceAtLeast(0f)
+            rootDropdown.y = (location[1] + anchorView.height + dpToPx(2)).toFloat()
+            activeDropdownView = rootDropdown
+        }
     }
 
     // Dynamic TopBar menu updater according to focused PWA
@@ -830,8 +823,12 @@ class DesktopPresentation(
         }
     }
 
-    // macOS Dropdown UI Helper
-    private fun showMacMenu(anchorView: View, menuItems: List<MacMenuItem>) {
+    // View-based Dynamic Custom Menu inside Presentation workspaceContainer
+    private fun showMacMenu(anchorView: View, menuItems: List<MacMenuItem>, isSubMenu: Boolean = false, subMenuX: Float = 0f, subMenuY: Float = 0f) {
+        if (!isSubMenu) {
+            dismissActiveDropdown()
+        }
+
         val popupView = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dpToPx(4), 0, dpToPx(4))
@@ -841,17 +838,7 @@ class DesktopPresentation(
                 cornerRadius = dpToPx(8).toFloat()
             }
             background = borderDrawable
-        }
-
-        val popupWindow = android.widget.PopupWindow(
-            popupView,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            true
-        ).apply {
             elevation = dpToPx(8).toFloat()
-            isOutsideTouchable = true
-            isFocusable = true
         }
 
         for (item in menuItems) {
@@ -881,8 +868,21 @@ class DesktopPresentation(
                     background = hoverBg
                     isClickable = true
                     isFocusable = true
+
+                    setOnHoverListener { v, event ->
+                        val tv = v as? TextView
+                        if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
+                            tv?.setBackgroundColor(Color.parseColor("#3584e4"))
+                            tv?.setTextColor(Color.WHITE)
+                        } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
+                            tv?.setBackgroundColor(Color.TRANSPARENT)
+                            tv?.setTextColor(Color.parseColor("#e2e8f0"))
+                        }
+                        false
+                    }
+
                     setOnClickListener {
-                        popupWindow.dismiss()
+                        dismissActiveDropdown()
                         item.action?.invoke()
                     }
                 }
@@ -890,11 +890,36 @@ class DesktopPresentation(
             }
         }
 
-        popupView.measure(
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        popupView.layoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
         )
-        popupWindow.showAsDropDown(anchorView, 0, dpToPx(2))
+        workspaceContainer.addView(popupView)
+
+        popupView.post {
+            if (isSubMenu) {
+                popupView.x = subMenuX
+                popupView.y = subMenuY
+                activeSubmenuView = popupView
+            } else {
+                val location = IntArray(2)
+                anchorView.getLocationOnScreen(location)
+                popupView.x = location[0].toFloat()
+                popupView.y = (location[1] + anchorView.height + dpToPx(2)).toFloat()
+                activeDropdownView = popupView
+            }
+        }
+    }
+
+    private fun dismissActiveDropdown() {
+        activeSubmenuView?.let {
+            workspaceContainer.removeView(it)
+            activeSubmenuView = null
+        }
+        activeDropdownView?.let {
+            workspaceContainer.removeView(it)
+            activeDropdownView = null
+        }
     }
 
     private fun showWifiDropdown() {
@@ -1219,6 +1244,46 @@ class DesktopPresentation(
             val cy = cursorY
             val offset = topBar.height + tabScroll.height + dpToPx(2)
 
+            if (activeDropdownView != null) {
+                val menu = activeDropdownView!!
+                val mx = menu.x
+                val my = menu.y
+                val mw = menu.width
+                val mh = menu.height
+                
+                val inMain = (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh)
+                
+                var inSub = false
+                activeSubmenuView?.let { sub ->
+                    val sx = sub.x
+                    val sy = sub.y
+                    val sw = sub.width
+                    val sh = sub.height
+                    inSub = (cx >= sx && cx <= sx + sw && cy >= sy && cy <= sy + sh)
+                }
+                
+                if (!inMain && !inSub) {
+                    dismissActiveDropdown()
+                    return@post
+                } else {
+                    if (!isRightClick) {
+                        val downTime = SystemClock.uptimeMillis()
+                        val eventTime = SystemClock.uptimeMillis()
+                        val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, cy, 0).apply {
+                            source = InputDevice.SOURCE_MOUSE
+                        }
+                        val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, cy, 0).apply {
+                            source = InputDevice.SOURCE_MOUSE
+                        }
+                        workspaceContainer.dispatchTouchEvent(downEvent)
+                        workspaceContainer.dispatchTouchEvent(upEvent)
+                        downEvent.recycle()
+                        upEvent.recycle()
+                    }
+                    return@post
+                }
+            }
+
             if (webView != null && cy >= offset) {
                 val relativeY = cy - offset
                 if (isRightClick) {
@@ -1267,9 +1332,44 @@ class DesktopPresentation(
     }
 
     private fun dispatchHoverAtCursor() {
-        val webView = getActiveWebView() ?: return
         val cx = cursorX
         val cy = cursorY
+
+        if (activeDropdownView != null) {
+            val menu = activeDropdownView!!
+            val mx = menu.x
+            val my = menu.y
+            val mw = menu.width
+            val mh = menu.height
+            if (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh) {
+                val downTime = SystemClock.uptimeMillis()
+                val eventTime = SystemClock.uptimeMillis()
+                val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, cy, 0).apply {
+                    source = InputDevice.SOURCE_MOUSE
+                }
+                workspaceContainer.dispatchGenericMotionEvent(hoverEvent)
+                hoverEvent.recycle()
+                return
+            }
+        }
+        activeSubmenuView?.let { sub ->
+            val sx = sub.x
+            val sy = sub.y
+            val sw = sub.width
+            val sh = sub.height
+            if (cx >= sx && cx <= sx + sw && cy >= sy && cy <= sy + sh) {
+                val downTime = SystemClock.uptimeMillis()
+                val eventTime = SystemClock.uptimeMillis()
+                val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, cy, 0).apply {
+                    source = InputDevice.SOURCE_MOUSE
+                }
+                workspaceContainer.dispatchGenericMotionEvent(hoverEvent)
+                hoverEvent.recycle()
+                return
+            }
+        }
+
+        val webView = getActiveWebView() ?: return
         val offset = topBar.height + tabScroll.height + dpToPx(2)
 
         if (cy >= offset) {
