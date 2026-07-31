@@ -3,7 +3,7 @@ document.addEventListener("DOMContentLoaded", function() {
     setupSettingListeners();
     startSimulatedModemTelemetry();
     startSystemMetricsSimulation();
-    switchCategory('display');
+    switchCategory('network');
 });
 
 // 1. QWebChannel Host Synchronization
@@ -21,8 +21,8 @@ function initializeAnodyneIPCBridge() {
                 logSystemEvent(`Background worker completed: Job [${jobId}] Success: ${success}. Info: ${message}`);
             });
             
-            // Query host sysfs zRAM configuration settings
             loadZramMetricsFromHost();
+            loadHostSystemStats();
         });
     } else if (window.sysContext) {
         logSystemEvent("Bridge synchronized. Connected to Android host container.");
@@ -36,6 +36,7 @@ function initializeAnodyneIPCBridge() {
         };
         
         loadZramMetricsFromHost();
+        loadHostSystemStats();
     } else {
         logSystemEvent("Standalone Mode: QWebChannel and Android bridge not present. Running offline simulations.");
     }
@@ -44,10 +45,8 @@ function initializeAnodyneIPCBridge() {
 function loadZramMetricsFromHost() {
     if (window.sysContext) {
         try {
-            // Check if it's Android (returns string directly) or Qt (uses callback)
             var size = sysContext.getZramDiskSize();
             if (typeof size === 'function' || size === undefined) {
-                // Qt style callback (or undefined if Qt setup is intermediate)
                 sysContext.getZramDiskSize(function(s) {
                     document.getElementById("zram-size-val").textContent = s;
                 });
@@ -58,7 +57,6 @@ function loadZramMetricsFromHost() {
                     document.getElementById("swappiness-val").textContent = sw;
                 });
             } else {
-                // Android style synchronous return
                 document.getElementById("zram-size-val").textContent = size;
                 document.getElementById("zram-algo-val").textContent = sysContext.getZramAlgorithm();
                 document.getElementById("swappiness-val").textContent = sysContext.getSystemSwappiness();
@@ -69,31 +67,57 @@ function loadZramMetricsFromHost() {
     }
 }
 
+function loadHostSystemStats() {
+    if (window.sysContext) {
+        try {
+            // Wi-Fi SSID connection query
+            if (typeof sysContext.getWifiSSID === 'function') {
+                var ssid = sysContext.getWifiSSID();
+                if (ssid) {
+                    document.getElementById("active-wifi-name").textContent = ssid;
+                }
+            }
+            // Storage Capacity query
+            if (typeof sysContext.getStorageStatus === 'function') {
+                var storage = sysContext.getStorageStatus();
+                if (storage) {
+                    document.getElementById("storage-status-val").textContent = storage;
+                }
+            }
+        } catch (e) {
+            console.error("Failed to query host system stats:", e);
+        }
+    }
+}
+
 // 2. Setting Event Handlers
 function setupSettingListeners() {
     const dataToggle = document.getElementById("mobile-data-toggle");
-    dataToggle.addEventListener("change", function() {
-        const state = dataToggle.checked ? "ENABLED" : "DISABLED";
-        logSystemEvent(`Mobile 4G Data set to ${state}`);
-        if (window.sysContext) {
-            sysContext.logWebEvent(`Settings: Changed Mobile Data State to ${state}`);
-        }
-    });
+    if (dataToggle) {
+        dataToggle.addEventListener("change", function() {
+            const state = dataToggle.checked ? "ENABLED" : "DISABLED";
+            logSystemEvent(`Mobile 4G Data set to ${state}`);
+            if (window.sysContext) {
+                sysContext.logWebEvent(`Settings: Changed Mobile Data State to ${state}`);
+            }
+        });
+    }
 
     const netSelect = document.getElementById("network-type-select");
-    netSelect.addEventListener("change", function() {
-        const mode = netSelect.value.toUpperCase();
-        logSystemEvent(`Preferred Network Type changed to: ${mode}`);
-        if (window.sysContext) {
-            sysContext.logWebEvent(`Settings: Network Type Preference set to ${mode}`);
-        }
-    });
+    if (netSelect) {
+        netSelect.addEventListener("change", function() {
+            const mode = netSelect.value.toUpperCase();
+            logSystemEvent(`Preferred Network Type changed to: ${mode}`);
+            if (window.sysContext) {
+                sysContext.logWebEvent(`Settings: Network Type Preference set to ${mode}`);
+            }
+        });
+    }
 }
 
-// Hardware slider handles
+// Slider controls
 function changeBrightness(val) {
     document.getElementById("brightness-val").textContent = val + "%";
-    // Direct sysfs writes simulation
     logSystemEvent(`Sysfs Brightness output -> /sys/class/backlight/brightness set to: ${val}%`);
     if (window.sysContext) {
         sysContext.logWebEvent(`Settings: sysfs backlight write -> ${val}%`);
@@ -102,7 +126,6 @@ function changeBrightness(val) {
 
 function changeVolume(val) {
     document.getElementById("volume-val").textContent = val + "%";
-    // ALSA volume mixer adjustment
     logSystemEvent(`ALSA Sound Mixer output -> Master volume set to: ${val}%`);
     if (window.sysContext) {
         sysContext.logWebEvent(`Settings: ALSA mixer volume -> ${val}%`);
@@ -118,7 +141,7 @@ function saveAPN() {
     }
 }
 
-// Power actions - Shutdown, Reboot, Powerwash
+// Power triggers
 function triggerPowerAction(action) {
     const consent = confirm(`Are you sure you want to perform system action: [${action.toUpperCase()}]?`);
     if (!consent) return;
@@ -126,14 +149,13 @@ function triggerPowerAction(action) {
     logSystemEvent(`System Action Triggered: ${action.toUpperCase()}`);
     if (window.sysContext) {
         sysContext.logWebEvent(`Settings: Executing native power execution -> ${action}`);
-        // Trigger system command directly via host bridge (e.g. shutdown -h now, reboot, or recovery boots)
         sysContext.executeSystemCommand(action);
     } else {
         logSystemEvent(`[Simulation] Host system executing: ${action}`);
     }
 }
 
-// 3. Telemetry Log and Simulation
+// Telemetry events
 function logSystemEvent(msg) {
     const logsBox = document.getElementById("telemetry-logs");
     if (!logsBox) return;
@@ -151,6 +173,7 @@ function logSystemEvent(msg) {
 
 function startSimulatedModemTelemetry() {
     const signalDisplay = document.getElementById("ofono-signal");
+    if (!signalDisplay) return;
     
     setInterval(function() {
         const dbs = -70 - Math.floor(Math.random() * 15);
@@ -176,38 +199,38 @@ function startSimulatedModemTelemetry() {
     }, 25000);
 }
 
-// Fluctuate CPU metrics
+// Fluctuates CPU values
 function startSystemMetricsSimulation() {
     const cpuDisplay = document.getElementById("cpu-load");
+    if (!cpuDisplay) return;
     
     setInterval(function() {
-        // CPU load fluctuations
         const load = 5 + Math.floor(Math.random() * 20);
         cpuDisplay.textContent = `${load}% Load`;
     }, 4000);
 }
 
+// Category switcher
 function switchCategory(cat) {
-    // Hide all sections
     const sections = document.querySelectorAll(".settings-section");
     sections.forEach(sec => sec.classList.add("hidden"));
 
-    // Show selected section
     const activeSec = document.getElementById("sec-" + cat);
     if (activeSec) {
         activeSec.classList.remove("hidden");
     }
 
-    // Update title
     const titles = {
-        'display': 'Sound & Display',
-        'network': 'Mobile Network',
+        'network': 'Network',
+        'wifi': 'Wi-Fi',
+        'bluetooth': 'Bluetooth',
+        'display': 'Display & Sound',
         'security': 'Security & Privacy',
-        'telemetry': 'System Telemetry'
+        'telemetry': 'System Telemetry',
+        'about': 'About'
     };
     document.getElementById("category-title").textContent = titles[cat] || 'Settings';
 
-    // Update active highlight in sidebar
     const listItems = document.querySelectorAll(".category-list li");
     listItems.forEach(li => li.classList.remove("active"));
     
@@ -215,4 +238,7 @@ function switchCategory(cat) {
     if (activeLi) {
         activeLi.classList.add("active");
     }
+
+    // Refresh Wi-Fi and Storage telemetries when visiting relevant tabs
+    loadHostSystemStats();
 }

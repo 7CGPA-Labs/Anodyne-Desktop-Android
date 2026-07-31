@@ -1,13 +1,18 @@
 let hashWorker = null;
 let selectedFileData = null;
 let selectedFileName = "";
+let currentDirectoryKey = "";
+
+// Navigation history
+let navigationHistory = [];
+let historyIndex = -1;
 
 document.addEventListener("DOMContentLoaded", function() {
     initializeAnodyneIPCBridge();
     initializeHashWorker();
     initializeDragAndDrop();
     // Default to user home view
-    switchDirectory('user-home');
+    navigateTo('user-home');
 });
 
 let activeJobId = "";
@@ -19,7 +24,6 @@ function initializeAnodyneIPCBridge() {
             window.sysContext = channel.objects.sysContext;
             sysContext.logWebEvent("Files PWA: Channel bridge synchronized.");
 
-            // Connect asynchronous job progress streams
             sysContext.nativeJobProgressChanged.connect(function(jobId, progress) {
                 if (activeJobId !== jobId) {
                     activeJobId = jobId;
@@ -29,7 +33,6 @@ function initializeAnodyneIPCBridge() {
                 updateFooterTaskBar(jobId, progress);
             });
 
-            // Connect final completion notifications
             sysContext.nativeJobFinished.connect(function(jobId, success, message) {
                 completeFooterTaskBar(jobId, success, message);
             });
@@ -55,6 +58,7 @@ function initializeAnodyneIPCBridge() {
 // 2. Directory Navigation Engine (Mocking namespaces)
 const fileSystemData = {
     'system-root': {
+        name: 'Other Locations',
         path: '/',
         items: [
             { name: 'bin', type: 'Directory', size: '--', perms: 'drwxr-xr-x' },
@@ -67,7 +71,8 @@ const fileSystemData = {
         ]
     },
     'user-home': {
-        path: '/home/user/',
+        name: 'Home',
+        path: '/home/user',
         items: [
             { name: 'Downloads', type: 'Directory', size: '--', perms: 'drwxr-xr-x' },
             { name: 'Documents', type: 'Directory', size: '--', perms: 'drwxr-xr-x' },
@@ -76,41 +81,66 @@ const fileSystemData = {
             { name: 'welcome.txt', type: 'File', size: '1.2 KB', perms: '-rw-r--r--' }
         ]
     },
-    'sandbox-rootfs': {
-        path: '/var/lib/anodyne/rootfs/',
-        items: [
-            { name: 'src', type: 'Directory', size: '--', perms: 'drwxr-xr-x' },
-            { name: 'ui', type: 'Directory', size: '--', perms: 'drwxr-xr-x' },
-            { name: 'web-apps', type: 'Directory', size: '--', perms: 'drwxr-xr-x' },
-            { name: 'main.cpp', type: 'C++ Source', size: '1.9 KB', perms: '-rw-r--r--' },
-            { name: 'AnodyneOS.pro', type: 'Project config', size: '837 B', perms: '-rw-r--r--' },
-            { name: 'LICENSE', type: 'License file', size: '35.8 KB', perms: '-rw-r--r--' },
-            { name: 'README.md', type: 'Markdown doc', size: '5.8 KB', perms: '-rw-r--r--' }
-        ]
-    },
     'external-usb': {
-        path: '/media/usb/backup/',
+        name: 'External USB',
+        path: '/media/usb/backup',
         items: [
             { name: 'SystemBackup_2026.tar.gz', type: 'Compressed Archive', size: '142.6 MB', perms: '-rw-r--r--' }
         ]
     },
     'recycle-bin': {
-        path: '/root/.recycle_bin/',
+        name: 'Trash',
+        path: '/root/.recycle_bin',
         items: [
             { name: 'old_kernel_config.bak', type: 'Backup File', size: '12 KB', perms: '-rw-r--r--' }
         ]
     }
 };
 
+function navigateTo(key) {
+    if (!fileSystemData[key]) return;
+    
+    // Add to history
+    if (historyIndex === -1 || navigationHistory[historyIndex] !== key) {
+        navigationHistory = navigationHistory.slice(0, historyIndex + 1);
+        navigationHistory.push(key);
+        historyIndex = navigationHistory.length - 1;
+    }
+    
+    switchDirectory(key);
+}
+
+function historyBack() {
+    if (historyIndex > 0) {
+        historyIndex--;
+        switchDirectory(navigationHistory[historyIndex]);
+    }
+}
+
+function historyForward() {
+    if (historyIndex < navigationHistory.length - 1) {
+        historyIndex++;
+        switchDirectory(navigationHistory[historyIndex]);
+    }
+}
+
+function updateHistoryButtons() {
+    const backBtn = document.getElementById("btn-back");
+    const forwardBtn = document.getElementById("btn-forward");
+    
+    if (backBtn) backBtn.style.opacity = (historyIndex > 0) ? "1" : "0.4";
+    if (forwardBtn) forwardBtn.style.opacity = (historyIndex < navigationHistory.length - 1) ? "1" : "0.4";
+}
+
 function switchDirectory(key) {
+    currentDirectoryKey = key;
     const data = fileSystemData[key];
     if (!data) return;
 
-    // Update path label
-    document.getElementById("current-path").textContent = data.path;
+    updateHistoryButtons();
 
     // Update Sidebar visual highlights
-    const listItems = document.querySelectorAll(".drive-list li");
+    const listItems = document.querySelectorAll(".files-sidebar li");
     listItems.forEach(li => li.classList.remove("active"));
     
     const activeItem = document.getElementById("sb-" + key);
@@ -118,35 +148,84 @@ function switchDirectory(key) {
         activeItem.classList.add("active");
     }
 
-    // Populate file table rows
-    const tbody = document.getElementById("files-list-body");
-    tbody.innerHTML = "";
+    // Draw Breadcrumbs
+    buildBreadcrumbs(data.path, key);
+
+    // Populate file grid
+    const grid = document.getElementById("files-grid");
+    grid.innerHTML = "";
 
     data.items.forEach(item => {
-        const tr = document.createElement("tr");
+        const itemEl = document.createElement("div");
+        itemEl.className = "grid-item";
+        
         if (item.type === 'Directory') {
-            tr.className = 'folder';
+            itemEl.ondblclick = function() {
+                // Nautilus double click navigation simulation
+                if (key === 'user-home' && (item.name === 'Downloads' || item.name === 'Documents' || item.name === 'Pictures')) {
+                    // Navigate to locations or simulate interior view
+                }
+            };
         }
         
-        tr.onclick = function() {
+        itemEl.onclick = function() {
+            document.querySelectorAll(".grid-item").forEach(el => el.classList.remove("selected"));
+            itemEl.classList.add("selected");
             selectVirtualFile(item.name, item.type, item.size, item.perms);
         };
         
-        let actionCell = "";
-        if (key !== 'recycle-bin') {
-            actionCell = `<td><button class="btn btn-danger btn-sm" onclick="deleteFile(event, '${key}', '${item.name}')">Delete</button></td>`;
-        } else {
-            actionCell = `<td><span style="color: #666; font-style: italic;">Locked</span></td>`;
-        }
-
-        tr.innerHTML = `
-            <td>${item.type === 'Directory' ? '📁' : '📄'} ${item.name}</td>
-            <td>${item.type}</td>
-            <td>${item.size}</td>
-            <td><code>${item.perms}</code></td>
-            ${actionCell}
+        // Clean vector icon drawings
+        const iconHtml = item.type === 'Directory' ? `
+            <svg width="48" height="48" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M6 10C6 7.79086 7.79086 6 10 6H24L30 14H54C56.2091 14 58 15.7909 58 18V50C58 52.2091 56.2091 54 54 54H10C7.79086 54 6 52.2091 6 50V10Z" fill="#3584e4"/>
+              <path d="M6 18C6 15.7909 7.79086 14 10 14H54C56.2091 14 58 15.7909 58 18V50C58 52.2091 56.2091 54 54 54H10C7.79086 54 6 52.2091 6 50V18Z" fill="#62a0ea"/>
+              <path d="M10 14H54C55.1046 14 56 14.8954 56 16V18H8V16C8 14.8954 8.89543 14 10 14Z" fill="#1c71d8" opacity="0.3"/>
+            </svg>
+        ` : `
+            <svg width="48" height="48" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 6C12 3.79086 13.7909 2 16 2H40L52 14V58C52 60.2091 50.2091 62 48 62H16C13.7909 62 12 60.2091 12 58V6Z" fill="#e2e8f0"/>
+              <path d="M40 2V14H52L40 2Z" fill="#cbd5e1"/>
+              <rect x="20" y="24" width="24" height="2" rx="1" fill="#94a3b8"/>
+              <rect x="20" y="32" width="24" height="2" rx="1" fill="#94a3b8"/>
+              <rect x="20" y="40" width="16" height="2" rx="1" fill="#94a3b8"/>
+            </svg>
         `;
-        tbody.appendChild(tr);
+
+        itemEl.innerHTML = `
+            <div class="item-icon">${iconHtml}</div>
+            <div class="item-name" title="${item.name}">${item.name}</div>
+        `;
+        grid.appendChild(itemEl);
+    });
+}
+
+function buildBreadcrumbs(path, key) {
+    const breadcrumbBox = document.getElementById("nautilus-breadcrumbs");
+    if (!breadcrumbBox) return;
+
+    breadcrumbBox.innerHTML = "";
+
+    const segments = path.split('/').filter(s => s.length > 0);
+    
+    // Root Segment
+    const rootItem = document.createElement("span");
+    rootItem.className = "breadcrumb-item" + (segments.length === 0 ? " active" : "");
+    rootItem.textContent = key === "system-root" ? "Computer" : "Home";
+    rootItem.onclick = () => navigateTo(key);
+    breadcrumbBox.appendChild(rootItem);
+
+    let currentAccumulatedPath = "";
+    segments.forEach((seg, idx) => {
+        const sep = document.createElement("span");
+        sep.className = "breadcrumb-separator";
+        sep.textContent = " › ";
+        breadcrumbBox.appendChild(sep);
+
+        const item = document.createElement("span");
+        const isActive = (idx === segments.length - 1);
+        item.className = "breadcrumb-item" + (isActive ? " active" : "");
+        item.textContent = seg;
+        breadcrumbBox.appendChild(item);
     });
 }
 
@@ -158,7 +237,6 @@ function deleteFile(event, dirKey, itemName) {
     if (index !== -1) {
         const item = dir.items.splice(index, 1)[0];
         
-        // Push it into recycle-bin
         fileSystemData['recycle-bin'].items.push({
             name: item.name + "_" + Date.now().toString().slice(-4),
             type: item.type,
@@ -167,11 +245,10 @@ function deleteFile(event, dirKey, itemName) {
         });
         
         if (window.sysContext) {
-            sysContext.logWebEvent("Deleted file (moved to recycle bin): " + dir.path + itemName);
-            sysContext.executeSystemCommand("mv " + dir.path + itemName + " /root/.recycle_bin/");
+            sysContext.logWebEvent("Deleted file (moved to recycle bin): " + dir.path + "/" + itemName);
+            sysContext.executeSystemCommand("mv " + dir.path + "/" + itemName + " /root/.recycle_bin/");
         }
         
-        // Refresh view
         switchDirectory(dirKey);
     }
 }
@@ -193,17 +270,14 @@ function controlJob(action) {
     }
 }
 
-// 3. Asynchronous Job Trigger
 function triggerBackupJob() {
     if (window.sysContext) {
-        // executeSystemCommand("files") triggers the background copy worker in C++
         sysContext.executeSystemCommand("files");
     } else {
         alert("Standalone Mode: QWebChannel not connected. Cannot start C++ worker.");
     }
 }
 
-// 4. Telemetry UI Updates
 function updateFooterTaskBar(jobId, progress) {
     const footer = document.getElementById("files-telemetry-footer");
     footer.classList.remove("hidden");
@@ -222,17 +296,14 @@ function completeFooterTaskBar(jobId, success, message) {
     progressFill.style.width = "100%";
     progressFill.style.backgroundColor = success ? "#4caf50" : "#f44336";
 
-    // Wait and then slide the footer out of view
     setTimeout(function() {
         document.getElementById("files-telemetry-footer").classList.add("hidden");
-        // Reset styling
         progressFill.style.width = "0%";
         progressFill.style.backgroundColor = "#007acc";
         activeJobId = "";
     }, 3000);
 }
 
-// 5. WASM Checksum Hashing & Drag-and-Drop Analysis
 function initializeHashWorker() {
     const statusEl = document.getElementById("hash-status");
     if (!statusEl) return;
@@ -279,7 +350,6 @@ function selectVirtualFile(name, type, size, perms) {
     document.getElementById("detail-size").textContent = size;
     document.getElementById("detail-perms").firstElementChild.textContent = perms;
     
-    // Hide previous hash results
     document.getElementById("hash-result-box").classList.add("hidden");
     document.getElementById("hash-value").value = "";
     
@@ -298,7 +368,6 @@ function selectVirtualFile(name, type, size, perms) {
         statusEl.textContent = "Ready to hash virtual payload";
         statusEl.style.color = "#ffcc00";
         
-        // Generate mock binary contents for virtual files based on name/size
         const mockContent = `Anodyne OS Mock File Payload for: ${name} (${size}) permissions: ${perms}`;
         const encoder = new TextEncoder();
         selectedFileData = encoder.encode(mockContent).buffer;

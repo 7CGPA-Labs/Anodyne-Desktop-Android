@@ -9,13 +9,17 @@
 </head>
 <body>
     <div class="files-app-container">
-        <!-- Sidebar Navigation -->
+        <!-- Sidebar Navigation (GNOME Nautilus Style) -->
         <aside class="files-sidebar">
-            <div class="section-title">User Folders</div>
+            <div class="section-title">Places</div>
             <ul class="drive-list">
                 <li id="sb-user-home" class="active" onclick="switchDirectory('user-home')">
-                    <span class="icon">🔑</span>
-                    <span class="label">tpm-luks User (/home)</span>
+                    <span class="icon">🏠</span>
+                    <span class="label">Home</span>
+                </li>
+                <li id="sb-system-root" onclick="switchDirectory('system-root')">
+                    <span class="icon">🖥️</span>
+                    <span class="label">Other Locations</span>
                 </li>
             </ul>
 
@@ -23,7 +27,7 @@
             <ul class="drive-list">
                 <li id="sb-external-usb" onclick="switchDirectory('external-usb')">
                     <span class="icon">🔌</span>
-                    <span class="label">External USB Backup</span>
+                    <span class="label">External USB</span>
                 </li>
             </ul>
 
@@ -31,39 +35,37 @@
             <ul class="drive-list">
                 <li id="sb-recycle-bin" onclick="switchDirectory('recycle-bin')">
                     <span class="icon">🗑️</span>
-                    <span class="label">Recycle Bin</span>
+                    <span class="label">Trash</span>
                 </li>
             </ul>
         </aside>
 
         <!-- Main Explorer Area -->
         <main class="files-main">
+            <!-- Nautilus Header Bar -->
             <header class="explorer-header">
-                <div class="path-bar">
-                    <span>Path:</span>
-                    <span id="current-path" class="path-text">/var/lib/anodyne/rootfs/</span>
+                <div class="header-left">
+                    <button class="nav-btn" onclick="historyBack()" id="btn-back" title="Go Back">🡰</button>
+                    <button class="nav-btn" onclick="historyForward()" id="btn-forward" title="Go Forward">🡲</button>
+                    <div class="nautilus-breadcrumbs" id="nautilus-breadcrumbs">
+                        <!-- Populated dynamically via JS -->
+                    </div>
                 </div>
-                <button class="btn btn-primary" onclick="triggerBackupJob()">
-                    <span class="btn-icon">📁</span> Backup Files to USB
-                </button>
+                <div class="header-right">
+                    <button class="header-action-btn" title="Search files">🔍</button>
+                    <button class="header-action-btn active" title="Grid view">▤</button>
+                    <button class="header-action-btn" title="View options">☰</button>
+                    <button class="btn btn-primary" onclick="triggerBackupJob()">
+                        <span class="btn-icon">📁</span> Backup to USB
+                    </button>
+                </div>
             </header>
 
-            <!-- File Grid/List -->
+            <!-- File Grid Content Pane -->
             <section class="explorer-content">
-                <table class="files-table">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Type</th>
-                            <th>Size</th>
-                            <th>Permissions</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="files-list-body">
-                        <!-- Populated dynamically via JS -->
-                    </tbody>
-                </table>
+                <div class="files-grid" id="files-grid">
+                    <!-- Populated dynamically via JS -->
+                </div>
             </section>
 
             <!-- Task Telemetry Footer -->
@@ -91,12 +93,12 @@
 
         <!-- File Details & Analysis Sidebar -->
         <aside class="details-sidebar" id="details-sidebar">
-            <div class="section-title">Analysis & Hashing</div>
+            <div class="section-title">Properties & Hash</div>
             
             <!-- Empty State / Dropzone -->
             <div id="details-empty-state" class="details-empty-state">
                 <div class="drop-icon">⚡</div>
-                <p class="drop-label">Select a file or drag & drop a real local file here to analyze and compute SHA-256 offline at native speed.</p>
+                <p class="drop-label">Select a file from the explorer grid or drag a local file here to analyze metrics and compute hashes.</p>
             </div>
 
             <!-- Details Content -->
