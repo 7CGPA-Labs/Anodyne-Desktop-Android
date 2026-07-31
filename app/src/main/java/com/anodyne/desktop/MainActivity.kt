@@ -160,7 +160,7 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(Color.parseColor("#050508"))
         }
 
-        // 1. Unified macOS-style TopBar
+        // 1. Unified GNOME/macOS-style TopBar
         topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
@@ -172,6 +172,13 @@ class MainActivity : AppCompatActivity() {
             setPadding(dpToPx(14), 0, dpToPx(14), 0)
         }
 
+        // Left Container for menus
+        val leftContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+            gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
+        }
+
         logoText = TextView(this).apply {
             text = "⬡"
             setTextColor(Color.parseColor("#f8fafc"))
@@ -179,7 +186,7 @@ class MainActivity : AppCompatActivity() {
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             setOnClickListener { showLogoDropdown() }
         }
-        topBar.addView(logoText)
+        leftContainer.addView(logoText)
 
         val createMenuText = { title: String, onClick: () -> Unit ->
             TextView(this).apply {
@@ -199,27 +206,46 @@ class MainActivity : AppCompatActivity() {
             setPadding(dpToPx(4), 0, dpToPx(4), 0)
             setOnClickListener { showAnodyneDropdown() }
         }
-        topBar.addView(anodyneMenu)
+        leftContainer.addView(anodyneMenu)
 
         fileMenu = createMenuText("File") { showFileDropdown() }
-        topBar.addView(fileMenu)
+        leftContainer.addView(fileMenu)
 
         editMenu = createMenuText("Edit") { showEditDropdown() }
-        topBar.addView(editMenu)
+        leftContainer.addView(editMenu)
 
         viewMenu = createMenuText("View") { showViewDropdown() }
-        topBar.addView(viewMenu)
+        leftContainer.addView(viewMenu)
 
         windowMenu = createMenuText("Window") { showWindowDropdown() }
-        topBar.addView(windowMenu)
+        leftContainer.addView(windowMenu)
 
         helpMenu = createMenuText("Help") { showHelpDropdown() }
-        topBar.addView(helpMenu)
+        leftContainer.addView(helpMenu)
+        topBar.addView(leftContainer)
 
-        val spacer = View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(0, 0, 1f)
+        // Center Container for Clock/Calendar/Notifications (GNOME style)
+        val centerContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            gravity = Gravity.CENTER
         }
-        topBar.addView(spacer)
+
+        clockTextView = TextView(this).apply {
+            setTextColor(Color.parseColor("#f8fafc"))
+            textSize = 8.5f
+            gravity = Gravity.CENTER
+            setOnClickListener { showGnomeCalendarDropdown(this) }
+        }
+        centerContainer.addView(clockTextView)
+        topBar.addView(centerContainer)
+
+        // Right Container for Status Icons
+        val rightContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+        }
 
         // Remote Access PIN Label
         val pinLabel = TextView(this).apply {
@@ -229,11 +255,11 @@ class MainActivity : AppCompatActivity() {
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             setPadding(0, 0, dpToPx(8), 0)
         }
-        topBar.addView(pinLabel)
+        rightContainer.addView(pinLabel)
 
-        // Mouse Mode Toggle
+        // Mouse Mode Toggle Icon
         val modeToggle = TextView(this).apply {
-            text = "📱 Touch"
+            text = "📱"
             setTextColor(Color.parseColor("#f8fafc"))
             textSize = 8.5f
             setPadding(dpToPx(4), dpToPx(1), dpToPx(4), dpToPx(1))
@@ -242,9 +268,9 @@ class MainActivity : AppCompatActivity() {
                 toggleInputModeText(this)
             }
         }
-        topBar.addView(modeToggle)
+        rightContainer.addView(modeToggle)
 
-        // Manual Floating Virtual Keyboard Toggle
+        // Manual Floating Virtual Keyboard Toggle Icon
         val keyboardToggle = TextView(this).apply {
             text = "⌨️"
             setTextColor(Color.parseColor("#94a3b8"))
@@ -260,9 +286,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        topBar.addView(keyboardToggle)
+        rightContainer.addView(keyboardToggle)
 
-        // macOS Spotlight Button
+        // macOS Spotlight Button Icon
         spotlightBtn = TextView(this).apply {
             text = "🔍"
             setTextColor(Color.parseColor("#94a3b8"))
@@ -270,32 +296,26 @@ class MainActivity : AppCompatActivity() {
             setPadding(dpToPx(5), 0, dpToPx(5), 0)
             setOnClickListener { toggleSpotlightSearch() }
         }
-        topBar.addView(spotlightBtn)
+        rightContainer.addView(spotlightBtn)
 
         wifiTextView = TextView(this).apply {
-            text = "Wi-Fi"
+            text = "🛜"
             setTextColor(Color.parseColor("#94a3b8"))
             textSize = 8.5f
-            setPadding(dpToPx(2), 0, 0, 0)
+            setPadding(dpToPx(4), 0, 0, 0)
             setOnClickListener { showWifiDropdown() }
         }
-        topBar.addView(wifiTextView)
+        rightContainer.addView(wifiTextView)
 
         batteryTextView = TextView(this).apply {
-            text = "100%"
+            text = "🔋"
             setTextColor(Color.parseColor("#94a3b8"))
             textSize = 8.5f
-            setPadding(dpToPx(4), 0, dpToPx(4), 0)
+            setPadding(dpToPx(6), 0, dpToPx(6), 0)
             setOnClickListener { showBatteryDropdown() }
         }
-        topBar.addView(batteryTextView)
-
-        clockTextView = TextView(this).apply {
-            setTextColor(Color.parseColor("#f8fafc"))
-            textSize = 8.5f
-            setOnClickListener { showClockDropdown() }
-        }
-        topBar.addView(clockTextView)
+        rightContainer.addView(batteryTextView)
+        topBar.addView(rightContainer)
 
         rootLayout.addView(topBar)
 
@@ -456,12 +476,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun toggleInputModeText(tv: TextView) {
         if (isTrackpadMode) {
-            tv.text = "📱 Touch"
+            tv.text = "📱"
             isTrackpadMode = false
             touchpadOverlay.visibility = View.GONE
             cursorView.visibility = View.GONE
         } else {
-            tv.text = "🖱️ Trackpad"
+            tv.text = "🖱️"
             isTrackpadMode = true
             touchpadOverlay.visibility = View.VISIBLE
             cursorView.visibility = View.VISIBLE
@@ -481,6 +501,219 @@ class MainActivity : AppCompatActivity() {
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    // GNOME-style Date & Time drop-down Calendar and Notification Area
+    private fun showGnomeCalendarDropdown(anchorView: View) {
+        val popupWidth = dpToPx(480)
+        val popupHeight = dpToPx(280)
+        
+        val rootDropdown = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
+            val borderDrawable = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#f912121a")) // Glassmorphism
+                setStroke(2, Color.parseColor("#2a2a3a"))
+                cornerRadius = dpToPx(12).toFloat()
+            }
+            background = borderDrawable
+        }
+
+        val popupWindow = android.widget.PopupWindow(
+            rootDropdown,
+            popupWidth,
+            popupHeight,
+            true
+        ).apply {
+            elevation = dpToPx(16).toFloat()
+            isOutsideTouchable = true
+            isFocusable = true
+        }
+
+        // --- Left Column: Notifications ---
+        val notificationsLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.1f).apply {
+                rightMargin = dpToPx(16)
+            }
+        }
+
+        val notifHeader = TextView(this).apply {
+            text = "Notifications"
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 12f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setPadding(0, 0, 0, dpToPx(10))
+        }
+        notificationsLayout.addView(notifHeader)
+
+        val notifScroll = android.widget.ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+            isVerticalScrollBarEnabled = false
+        }
+        val notifList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        val addNotification = { titleStr: String, textStr: String, timeStr: String ->
+            val item = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dpToPx(8), dpToPx(8), dpToPx(8), dpToPx(8))
+                val bg = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.parseColor("#1a1a26"))
+                    cornerRadius = dpToPx(6).toFloat()
+                }
+                background = bg
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dpToPx(8)
+                }
+            }
+            
+            val tRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+            }
+            val titleText = TextView(this).apply {
+                text = titleStr
+                setTextColor(Color.WHITE)
+                textSize = 10f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            val timeText = TextView(this).apply {
+                text = timeStr
+                setTextColor(Color.parseColor("#64748b"))
+                textSize = 8f
+            }
+            tRow.addView(titleText)
+            tRow.addView(timeText)
+            item.addView(tRow)
+
+            val descText = TextView(this).apply {
+                text = textStr
+                setTextColor(Color.parseColor("#94a3b8"))
+                textSize = 9f
+                setPadding(0, dpToPx(2), 0, 0)
+            }
+            item.addView(descText)
+            notifList.addView(item)
+        }
+
+        addNotification("System Update", "Anodyne Desktop is up to date.", "Just now")
+        addNotification("Remote Access Server", "Active connection PIN is $accessPin", "2m ago")
+        addNotification("Battery Status", "Running on " + getBatteryPowerSource(), "10m ago")
+
+        notifScroll.addView(notifList)
+        notificationsLayout.addView(notifScroll)
+        rootDropdown.addView(notificationsLayout)
+
+        val divider = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                dpToPx(1),
+                ViewGroup.LayoutParams.MATCH_PARENT
+            ).apply {
+                rightMargin = dpToPx(16)
+            }
+            setBackgroundColor(Color.parseColor("#2a2a3a"))
+        }
+        rootDropdown.addView(divider)
+
+        // --- Right Column: Calendar ---
+        val calendarLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.0f)
+        }
+
+        val calHeader = TextView(this).apply {
+            val sdf = SimpleDateFormat("MMMM yyyy", Locale.US)
+            text = sdf.format(Date())
+            setTextColor(Color.WHITE)
+            textSize = 12f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, 0, 0, dpToPx(10))
+        }
+        calendarLayout.addView(calHeader)
+
+        val daysGrid = android.widget.GridLayout(this).apply {
+            columnCount = 7
+            rowCount = 6
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.MATCH_PARENT
+            )
+        }
+
+        val dayLabels = listOf("Su", "Mo", "Tu", "We", "Th", "Fr", "Sa")
+        for (day in dayLabels) {
+            val label = TextView(this).apply {
+                text = day
+                setTextColor(Color.parseColor("#64748b"))
+                textSize = 9f
+                gravity = Gravity.CENTER
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                layoutParams = android.widget.GridLayout.LayoutParams().apply {
+                    width = 0
+                    height = ViewGroup.LayoutParams.WRAP_CONTENT
+                    columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
+                }
+            }
+            daysGrid.addView(label)
+        }
+
+        val calendar = java.util.Calendar.getInstance()
+        val currentDay = calendar.get(java.util.Calendar.DAY_OF_MONTH)
+        calendar.set(java.util.Calendar.DAY_OF_MONTH, 1)
+        val firstDayOfWeek = calendar.get(java.util.Calendar.DAY_OF_WEEK) - 1
+        val maxDays = calendar.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
+
+        for (i in 0 until firstDayOfWeek) {
+            val blank = View(this).apply {
+                layoutParams = android.widget.GridLayout.LayoutParams().apply {
+                    width = 0
+                    height = dpToPx(22)
+                    columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
+                }
+            }
+            daysGrid.addView(blank)
+        }
+
+        for (day in 1..maxDays) {
+            val cell = TextView(this).apply {
+                text = day.toString()
+                textSize = 9f
+                gravity = Gravity.CENTER
+                
+                layoutParams = android.widget.GridLayout.LayoutParams().apply {
+                    width = 0
+                    height = dpToPx(20)
+                    columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
+                }
+
+                if (day == currentDay) {
+                    setTextColor(Color.WHITE)
+                    val bg = android.graphics.drawable.GradientDrawable().apply {
+                        setColor(Color.parseColor("#3584e4"))
+                        cornerRadius = dpToPx(10).toFloat()
+                    }
+                    background = bg
+                } else {
+                    setTextColor(Color.parseColor("#e2e8f0"))
+                }
+            }
+            daysGrid.addView(cell)
+        }
+
+        calendarLayout.addView(daysGrid)
+        rootDropdown.addView(calendarLayout)
+
+        popupWindow.showAsDropDown(anchorView, -dpToPx(180), dpToPx(2))
     }
 
     // macOS Dropdown UI Helper
@@ -550,7 +783,6 @@ class MainActivity : AppCompatActivity() {
         popupWindow.showAsDropDown(anchorView, 0, dpToPx(2))
     }
 
-    // Dropdown list declarations
     private fun showLogoDropdown() {
         showMacMenu(logoText, listOf(
             MacMenuItem("About Anodyne Desktop") { showAboutDialog() },
@@ -565,7 +797,7 @@ class MainActivity : AppCompatActivity() {
     private fun showAnodyneDropdown() {
         showMacMenu(anodyneMenu, listOf(
             MacMenuItem("Toggle Pointer Mode") { 
-                val modeBtn = topBar.getChildAt(topBar.childCount - 6) as? TextView
+                val modeBtn = topBar.findViewById<TextView>(wifiTextView.id - 4) // target input mode text
                 modeBtn?.let { toggleInputModeText(it) }
             },
             MacMenuItem(isSeparator = true),
@@ -574,7 +806,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showFileDropdown() {
-        showMacMenu(fileMenu, listOf(
+        showMacMenu(fileMenu ?: logoText, listOf(
             MacMenuItem("New Browser Tab") { openOrSwitchTab("web_" + System.currentTimeMillis(), "file:///android_asset/homepage/index.html", "New Tab") },
             MacMenuItem("Close Active Tab") { getActiveTabItem()?.let { closeTab(it) } },
             MacMenuItem(isSeparator = true),
@@ -583,7 +815,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showEditDropdown() {
-        showMacMenu(editMenu, listOf(
+        showMacMenu(editMenu ?: logoText, listOf(
             MacMenuItem("Undo") { getActiveWebView()?.evaluateJavascript("document.execCommand('undo')", null) },
             MacMenuItem("Redo") { getActiveWebView()?.evaluateJavascript("document.execCommand('redo')", null) },
             MacMenuItem(isSeparator = true),
@@ -595,7 +827,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showViewDropdown() {
-        showMacMenu(viewMenu, listOf(
+        showMacMenu(viewMenu ?: logoText, listOf(
             MacMenuItem("Reload Page") { getActiveWebView()?.reload() },
             MacMenuItem("Force Reload") { getActiveWebView()?.apply { clearCache(true); reload() } },
             MacMenuItem(isSeparator = true),
@@ -606,14 +838,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showWindowDropdown() {
-        showMacMenu(windowMenu, listOf(
+        showMacMenu(windowMenu ?: logoText, listOf(
             MacMenuItem("Minimize") { moveTaskToBack(true) },
             MacMenuItem("Bring All to Front") { openOrSwitchTab("home", "file:///android_asset/homepage/index.html", "Dashboard") }
         ))
     }
 
     private fun showHelpDropdown() {
-        showMacMenu(helpMenu, listOf(
+        showMacMenu(helpMenu ?: logoText, listOf(
             MacMenuItem("Anodyne Help") { openOrSwitchTab("help", "https://github.com/7CGPA-Labs/Anodyne-Desktop-Android", "Anodyne Help") },
             MacMenuItem("Send Feedback...") { openOrSwitchTab("feedback", "https://github.com/7CGPA-Labs/Anodyne-Desktop-Android/issues", "Send Feedback") }
         ))
@@ -631,7 +863,7 @@ class MainActivity : AppCompatActivity() {
     private fun showBatteryDropdown() {
         showMacMenu(batteryTextView, listOf(
             MacMenuItem("Power Source: " + getBatteryPowerSource()),
-            MacMenuItem("Current Charge: " + batteryTextView.text),
+            MacMenuItem("Current Charge: " + getBatteryPct() + "%"),
             MacMenuItem(isSeparator = true),
             MacMenuItem("Battery Health: Good")
         ))
@@ -671,6 +903,14 @@ class MainActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {}
         return "127.0.0.1"
+    }
+
+    private fun getBatteryPct(): Int {
+        try {
+            val batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+            return batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        } catch (e: Exception) {}
+        return 100
     }
 
     private fun getBatteryPowerSource(): String {
@@ -781,16 +1021,6 @@ class MainActivity : AppCompatActivity() {
     private fun updateClockAndStatus() {
         val sdf = SimpleDateFormat("EEE MMM d  H:mm", Locale.US)
         clockTextView.text = sdf.format(Date())
-
-        try {
-            val batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-            val pct = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-            batteryTextView.text = "$pct%"
-
-            wifiTextView.text = getWifiSSID()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error updating status metrics", e)
-        }
     }
 
     private fun createTabWebView(url: String): WebView {
@@ -1632,6 +1862,8 @@ class MainActivity : AppCompatActivity() {
             return true
         }
     }
+
+
 
     companion object {
         private const val TAG = "AnodyneMainActivity"
