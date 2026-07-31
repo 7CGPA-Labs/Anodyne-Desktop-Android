@@ -771,32 +771,33 @@ class DesktopPresentation(
             val isActive = (i == currentTabIndex)
 
             val tabItem = LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
+                orientation = LinearLayout.HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(
-                    dpToPx(130),
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                setBackgroundColor(Color.parseColor(if (isActive) "#161622" else "#08080f"))
+                    dpToPx(140),
+                    LinearLayout.LayoutParams.MATCH_PARENT
+                ).apply {
+                    topMargin = dpToPx(6)
+                    rightMargin = dpToPx(2)
+                }
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dpToPx(12), 0, dpToPx(8), 0)
+                
+                val tabDrawable = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.parseColor(if (isActive) "#1e1e2e" else "#0c0c14"))
+                    val r = dpToPx(8).toFloat()
+                    cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+                }
+                background = tabDrawable
+                
                 setOnClickListener {
                     switchTab(i)
                 }
             }
 
-            val row = LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    0,
-                    1f
-                )
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dpToPx(10), 0, dpToPx(6), 0)
-            }
-
             val titleText = TextView(context).apply {
                 text = tab.title
                 setTextColor(Color.parseColor(if (isActive) "#f8fafc" else "#94a3b8"))
-                textSize = 12f
+                textSize = 11f
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
                 layoutParams = LinearLayout.LayoutParams(
@@ -805,35 +806,77 @@ class DesktopPresentation(
                     1f
                 )
             }
-            row.addView(titleText)
+            tabItem.addView(titleText)
 
             if (tab.id != "home") {
                 val closeBtn = TextView(context).apply {
                     text = " × "
-                    setTextColor(Color.parseColor("#64748b"))
-                    textSize = 15f
+                    setTextColor(Color.parseColor(if (isActive) "#94a3b8" else "#64748b"))
+                    textSize = 14f
                     gravity = Gravity.CENTER
                     setPadding(dpToPx(4), dpToPx(2), dpToPx(4), dpToPx(2))
+                    val btnBg = android.graphics.drawable.GradientDrawable().apply {
+                        setColor(Color.TRANSPARENT)
+                        cornerRadius = dpToPx(8).toFloat()
+                    }
+                    background = btnBg
+                    
+                    setOnHoverListener { v, event ->
+                        if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
+                            (v.background as? android.graphics.drawable.GradientDrawable)?.setColor(Color.parseColor("#334155"))
+                            setTextColor(Color.WHITE)
+                        } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
+                            (v.background as? android.graphics.drawable.GradientDrawable)?.setColor(Color.TRANSPARENT)
+                            setTextColor(Color.parseColor(if (isActive) "#94a3b8" else "#64748b"))
+                        }
+                        false
+                    }
+                    
                     setOnClickListener {
                         closeTab(tab)
                     }
                 }
-                row.addView(closeBtn)
+                tabItem.addView(closeBtn)
             }
-
-            tabItem.addView(row)
-
-            val indicator = View(context).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    dpToPx(2)
-                )
-                setBackgroundColor(Color.parseColor(if (isActive) "#a855f7" else "#00000000"))
-            }
-            tabItem.addView(indicator)
 
             tabContainer.addView(tabItem)
         }
+
+        val plusBtn = TextView(context).apply {
+            text = " + "
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 16f
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                dpToPx(26),
+                dpToPx(26)
+            ).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                leftMargin = dpToPx(6)
+                topMargin = dpToPx(6)
+            }
+            val bg = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#1a1a24"))
+                cornerRadius = dpToPx(13).toFloat()
+            }
+            background = bg
+            
+            setOnHoverListener { v, event ->
+                if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
+                    (v.background as? android.graphics.drawable.GradientDrawable)?.setColor(Color.parseColor("#334155"))
+                    setTextColor(Color.WHITE)
+                } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
+                    (v.background as? android.graphics.drawable.GradientDrawable)?.setColor(Color.parseColor("#1a1a24"))
+                    setTextColor(Color.parseColor("#94a3b8"))
+                }
+                false
+            }
+            
+            setOnClickListener {
+                openOrSwitchTab("web_" + System.currentTimeMillis(), "file:///android_asset/homepage/index.html", "New Tab")
+            }
+        }
+        tabContainer.addView(plusBtn)
     }
 
     private fun dpToPx(dp: Int): Int {
