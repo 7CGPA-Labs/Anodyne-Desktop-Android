@@ -143,8 +143,18 @@ function initializeAnodyneIPCBridge() {
         window.onNativeJobFinished = function(jobId, success, message) {
             completeVisualTaskBar(jobId, message);
         };
+
+        if (typeof sysContext.getGpsLocation === 'function') {
+            const loc = sysContext.getGpsLocation();
+            window.updateDashboardGpsLocation(loc);
+        }
     }
 }
+
+window.updateDashboardGpsLocation = function(placeString) {
+    const el = document.getElementById("gps-place-text");
+    if (el) el.textContent = placeString;
+};
 
 function launchApp(appKeyword) {
     if (window.sysContext) {

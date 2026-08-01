@@ -177,6 +177,11 @@ class AndroidSysContext(
         (context as? MainActivity)?.stopRemoteControlSessionFromWeb()
     }
 
+    @JavascriptInterface
+    fun getGpsLocation(): String {
+        return (context as? MainActivity)?.getGpsLocationFromNative() ?: "Locating..."
+    }
+
     companion object {
         private const val TAG = "AndroidSysContext"
     }

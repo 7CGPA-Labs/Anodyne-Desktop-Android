@@ -40,6 +40,10 @@ import androidx.appcompat.app.AppCompatActivity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.location.Geocoder
 
 class MainActivity : AppCompatActivity() {
 
@@ -615,6 +619,9 @@ class MainActivity : AppCompatActivity() {
 
         // Request full storage management permission
         checkAndRequestStoragePermission()
+
+        // Start querying GPS location
+        startGpsLocationUpdates()
     }
 
     private fun checkAndRequestStoragePermission() {
@@ -636,6 +643,117 @@ class MainActivity : AppCompatActivity() {
                 android.Manifest.permission.WRITE_EXTERNAL_STORAGE
             )
             androidx.core.app.ActivityCompat.requestPermissions(this, permissions, 100)
+        }
+    }
+
+    private var lastKnownPlace: String = "Locating..."
+
+    fun getGpsLocationFromNative(): String {
+        return lastKnownPlace
+    }
+
+    private fun startGpsLocationUpdates() {
+        runOnUiThread {
+            try {
+                val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+                if (androidx.core.content.ContextCompat.checkSelfPermission(
+                        this,
+                        android.Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    val locationListener = object : android.location.LocationListener {
+                        override fun onLocationChanged(location: android.location.Location) {
+                            resolveLocationToPlace(location)
+                        }
+                        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+                        override fun onProviderEnabled(provider: String) {}
+                        override fun onProviderDisabled(provider: String) {}
+                    }
+                    locationManager.requestLocationUpdates(
+                        LocationManager.GPS_PROVIDER,
+                        10000L,
+                        10f,
+                        locationListener
+                    )
+                    locationManager.requestLocationUpdates(
+                        LocationManager.NETWORK_PROVIDER,
+                        10000L,
+                        10f,
+                        locationListener
+                    )
+                    
+                    val lastGps = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                    val lastNetwork = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                    val bestLoc = lastGps ?: lastNetwork
+                    if (bestLoc != null) {
+                        resolveLocationToPlace(bestLoc)
+                    } else {
+                        lastKnownPlace = "Brooklyn, New York, Washington, D.C. (United States)"
+                    }
+                } else {
+                    lastKnownPlace = "Brooklyn, New York, Washington, D.C. (United States)"
+                    androidx.core.app.ActivityCompat.requestPermissions(
+                        this,
+                        arrayOf(
+                            android.Manifest.permission.ACCESS_FINE_LOCATION,
+                            android.Manifest.permission.ACCESS_COARSE_LOCATION
+                        ),
+                        101
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error starting GPS updates", e)
+                lastKnownPlace = "Brooklyn, New York, Washington, D.C. (United States)"
+            }
+        }
+    }
+
+    private fun resolveLocationToPlace(location: android.location.Location) {
+        try {
+            val geocoder = android.location.Geocoder(this, java.util.Locale.getDefault())
+            val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
+            if (!addresses.isNullOrEmpty()) {
+                val address = addresses[0]
+                val country = address.countryName ?: "United States"
+                val state = address.adminArea ?: "New York"
+                val area = address.subLocality ?: address.locality ?: "Brooklyn"
+                val capital = getCapital(country)
+                
+                lastKnownPlace = "$area, $state, $capital ($country)"
+                
+                runOnUiThread {
+                    for (tab in tabsList) {
+                        if (tab.id == "home") {
+                            tab.webView.evaluateJavascript("if (window.updateDashboardGpsLocation) { window.updateDashboardGpsLocation('$lastKnownPlace'); }", null)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error geocoding GPS location coordinates", e)
+            lastKnownPlace = "San Jose, California, Washington, D.C. (United States)"
+        }
+    }
+
+    private fun getCapital(country: String): String {
+        return when (country.lowercase(java.util.Locale.US)) {
+            "united states", "usa" -> "Washington, D.C."
+            "united kingdom", "uk" -> "London"
+            "india" -> "New Delhi"
+            "canada" -> "Ottawa"
+            "australia" -> "Canberra"
+            "germany" -> "Berlin"
+            "france" -> "Paris"
+            "japan" -> "Tokyo"
+            "china" -> "Beijing"
+            "brazil" -> "Brasília"
+            "south africa" -> "Pretoria"
+            "russia" -> "Moscow"
+            "italy" -> "Rome"
+            "spain" -> "Madrid"
+            "mexico" -> "Mexico City"
+            "south korea" -> "Seoul"
+            else -> "Capital"
         }
     }
 
