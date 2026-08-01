@@ -544,8 +544,59 @@ class MainActivity : AppCompatActivity() {
 
         setContentView(workspaceContainer)
 
-        // Initialize default Home tab
-        openOrSwitchTab("home", "file:///android_asset/homepage/index.html", "Dashboard")
+        // Initialize default Home tab or restore hibernated state
+        val restored = restoreHibernationState()
+        if (!restored) {
+            openOrSwitchTab("home", "file:///android_asset/homepage/index.html", "Dashboard")
+        }
+
+        // 7. Welcome Splash Screen Overlay
+        val splashLayout = FrameLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            setBackgroundColor(Color.parseColor("#09090e"))
+            isClickable = true
+            isFocusable = true
+        }
+        val centerLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+        }
+        val logoView = TextView(this).apply {
+            text = "⬡"
+            setTextColor(Color.WHITE)
+            textSize = 64f
+            gravity = Gravity.CENTER
+        }
+        val titleView = TextView(this).apply {
+            text = "Anodyne OS"
+            setTextColor(Color.WHITE)
+            textSize = 24f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(0, dpToPx(16), 0, 0)
+        }
+        val subtitleView = TextView(this).apply {
+            text = "Loading environment..."
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setPadding(0, dpToPx(8), 0, 0)
+        }
+        centerLayout.addView(logoView)
+        centerLayout.addView(titleView)
+        centerLayout.addView(subtitleView)
+        splashLayout.addView(centerLayout)
+        workspaceContainer.addView(splashLayout)
+
+        splashLayout.animate()
+            .alpha(0f)
+            .setDuration(800)
+            .setStartDelay(2000)
+            .withEndAction {
+                workspaceContainer.removeView(splashLayout)
+            }
+            .start()
 
         // Start clock status timer
         clockHandler.post(clockRunnable)
@@ -2788,6 +2839,97 @@ class MainActivity : AppCompatActivity() {
             tab.webView.destroy()
         }
         super.onDestroy()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        saveHibernationState()
+    }
+
+    override fun onBackPressed() {
+        if (spotlightOverlay.visibility == View.VISIBLE) {
+            hideSpotlightSearch()
+            return
+        }
+        dismissActiveDropdown()
+        
+        AlertDialog.Builder(this)
+            .setTitle("Exit Anodyne OS?")
+            .setMessage("Would you like to put the desktop to sleep (hibernate open tabs) and exit?")
+            .setPositiveButton("Hibernate & Exit") { _, _ ->
+                saveHibernationState()
+                finish()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun saveHibernationState() {
+        try {
+            val prefs = getSharedPreferences("anodyne_hibernation", Context.MODE_PRIVATE)
+            val jsonArray = org.json.JSONArray()
+            for (tab in tabsList) {
+                val tabObj = org.json.JSONObject().apply {
+                    put("id", tab.id)
+                    put("url", tab.webView.url ?: tab.url)
+                    put("title", tab.title)
+                }
+                jsonArray.put(tabObj)
+            }
+            prefs.edit().apply {
+                putString("tabs_json", jsonArray.toString())
+                putInt("active_index", currentTabIndex)
+                apply()
+            }
+            Log.i(TAG, "Hibernated system state successfully: saved ${tabsList.size} tabs")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving hibernation state", e)
+        }
+    }
+
+    private fun restoreHibernationState(): Boolean {
+        try {
+            val prefs = getSharedPreferences("anodyne_hibernation", Context.MODE_PRIVATE)
+            val tabsJson = prefs.getString("tabs_json", null) ?: return false
+            val activeIndex = prefs.getInt("active_index", 0)
+            
+            val jsonArray = org.json.JSONArray(tabsJson)
+            if (jsonArray.length() == 0) return false
+            
+            for (i in 0 until jsonArray.length()) {
+                val tabObj = jsonArray.getJSONObject(i)
+                val id = tabObj.getString("id")
+                val url = tabObj.getString("url")
+                val title = tabObj.getString("title")
+                
+                openOrSwitchTabWithoutFocus(id, url, title)
+            }
+            
+            runOnUiThread {
+                if (activeIndex in 0 until tabsList.size) {
+                    switchTab(activeIndex)
+                } else if (tabsList.isNotEmpty()) {
+                    switchTab(0)
+                }
+            }
+            return true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error restoring hibernation state", e)
+            return false
+        }
+    }
+
+    private fun openOrSwitchTabWithoutFocus(id: String, url: String, title: String) {
+        val existingIndex = tabsList.indexOfFirst { it.id == id }
+        if (existingIndex == -1) {
+            val newWebView = createTabWebView(url).apply {
+                visibility = View.GONE
+            }
+            webViewContainer.addView(newWebView)
+
+            val newTab = TabItem(id, url, title, newWebView)
+            tabsList.add(newTab)
+        }
     }
 
     inner class TouchpadLayout(context: Context) : FrameLayout(context) {
