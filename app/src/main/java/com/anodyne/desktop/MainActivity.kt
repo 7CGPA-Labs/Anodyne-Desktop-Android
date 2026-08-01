@@ -296,8 +296,26 @@ class MainActivity : AppCompatActivity() {
 
         clockTextView = TextView(this).apply {
             setTextColor(Color.parseColor("#f8fafc"))
-            textSize = 8.5f
+            textSize = 8.5f * currentScale
             gravity = Gravity.CENTER
+            setPadding(dpToPx(12), 0, dpToPx(12), 0)
+            val hoverBg = android.graphics.drawable.StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_pressed), android.graphics.drawable.ColorDrawable(Color.parseColor("#2a2a35")))
+                addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            }
+            background = hoverBg
+            isClickable = true
+            isFocusable = true
+            
+            setOnHoverListener { v, event ->
+                if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
+                    v.setBackgroundColor(Color.parseColor("#2a2a35"))
+                } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
+                    v.setBackgroundColor(Color.TRANSPARENT)
+                }
+                false
+            }
+            
             setOnClickListener { showGnomeCalendarDropdown(this) }
         }
         centerContainer.addView(clockTextView)

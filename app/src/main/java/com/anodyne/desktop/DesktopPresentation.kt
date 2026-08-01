@@ -271,8 +271,26 @@ class DesktopPresentation(
 
         clockTextView = TextView(context).apply {
             setTextColor(Color.parseColor("#f8fafc"))
-            textSize = 8.5f
+            textSize = 8.5f * currentScale
             gravity = Gravity.CENTER
+            setPadding(dpToPx(12), 0, dpToPx(12), 0)
+            val hoverBg = android.graphics.drawable.StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_pressed), android.graphics.drawable.ColorDrawable(Color.parseColor("#2a2a35")))
+                addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            }
+            background = hoverBg
+            isClickable = true
+            isFocusable = true
+            
+            setOnHoverListener { v, event ->
+                if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
+                    v.setBackgroundColor(Color.parseColor("#2a2a35"))
+                } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
+                    v.setBackgroundColor(Color.TRANSPARENT)
+                }
+                false
+            }
+            
             setOnClickListener { showGnomeCalendarDropdown(this) }
         }
         centerContainer.addView(clockTextView)
@@ -559,35 +577,36 @@ class DesktopPresentation(
     private fun showGnomeCalendarDropdown(anchorView: View) {
         dismissActiveDropdown()
 
-        val popupWidth = dpToPx(480)
-        val popupHeight = dpToPx(280)
+        val scale = currentScale
+        val popupWidth = dpToPx((380 * scale).toInt())
+        val popupHeight = dpToPx((230 * scale).toInt())
         
         val rootDropdown = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
+            setPadding(dpToPx((12 * scale).toInt()), dpToPx((12 * scale).toInt()), dpToPx((12 * scale).toInt()), dpToPx((12 * scale).toInt()))
             val borderDrawable = android.graphics.drawable.GradientDrawable().apply {
-                setColor(Color.parseColor("#f912121a"))
-                setStroke(2, Color.parseColor("#2a2a3a"))
-                cornerRadius = dpToPx(12).toFloat()
+                setColor(Color.parseColor("#f912121a")) // Glassmorphism
+                setStroke((1.5f * scale).toInt().coerceAtLeast(1), Color.parseColor("#2a2a3a"))
+                cornerRadius = dpToPx((10 * scale).toInt()).toFloat()
             }
             background = borderDrawable
-            elevation = dpToPx(16).toFloat()
+            elevation = dpToPx((12 * scale).toInt()).toFloat()
         }
 
         // Left Column: Notifications
         val notificationsLayout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.1f).apply {
-                rightMargin = dpToPx(16)
+                rightMargin = dpToPx((12 * scale).toInt())
             }
         }
 
         val notifHeader = TextView(context).apply {
             text = "Notifications"
             setTextColor(Color.parseColor("#94a3b8"))
-            textSize = 12f
+            textSize = 9.5f * scale
             typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setPadding(0, 0, 0, dpToPx(10))
+            setPadding(0, 0, 0, dpToPx((8 * scale).toInt()))
         }
         notificationsLayout.addView(notifHeader)
 
@@ -606,17 +625,17 @@ class DesktopPresentation(
         val addNotification = { titleStr: String, textStr: String, timeStr: String ->
             val item = LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dpToPx(8), dpToPx(8), dpToPx(8), dpToPx(8))
+                setPadding(dpToPx((6 * scale).toInt()), dpToPx((6 * scale).toInt()), dpToPx((6 * scale).toInt()), dpToPx((6 * scale).toInt()))
                 val bg = android.graphics.drawable.GradientDrawable().apply {
                     setColor(Color.parseColor("#1a1a26"))
-                    cornerRadius = dpToPx(6).toFloat()
+                    cornerRadius = dpToPx((5 * scale).toInt()).toFloat()
                 }
                 background = bg
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    bottomMargin = dpToPx(8)
+                    bottomMargin = dpToPx((6 * scale).toInt())
                 }
             }
             
@@ -626,14 +645,14 @@ class DesktopPresentation(
             val titleText = TextView(context).apply {
                 text = titleStr
                 setTextColor(Color.WHITE)
-                textSize = 10f
+                textSize = 8.5f * scale
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             }
             val timeText = TextView(context).apply {
                 text = timeStr
                 setTextColor(Color.parseColor("#64748b"))
-                textSize = 8f
+                textSize = 7f * scale
             }
             tRow.addView(titleText)
             tRow.addView(timeText)
@@ -642,8 +661,8 @@ class DesktopPresentation(
             val descText = TextView(context).apply {
                 text = textStr
                 setTextColor(Color.parseColor("#94a3b8"))
-                textSize = 9f
-                setPadding(0, dpToPx(2), 0, 0)
+                textSize = 8f * scale
+                setPadding(0, dpToPx((2 * scale).toInt()), 0, 0)
             }
             item.addView(descText)
             notifList.addView(item)
@@ -658,10 +677,10 @@ class DesktopPresentation(
 
         val divider = View(context).apply {
             layoutParams = LinearLayout.LayoutParams(
-                dpToPx(1),
+                dpToPx((1 * scale).toInt().coerceAtLeast(1)),
                 ViewGroup.LayoutParams.MATCH_PARENT
             ).apply {
-                rightMargin = dpToPx(16)
+                rightMargin = dpToPx((12 * scale).toInt())
             }
             setBackgroundColor(Color.parseColor("#2a2a3a"))
         }
@@ -677,10 +696,10 @@ class DesktopPresentation(
             val sdf = SimpleDateFormat("MMMM yyyy", Locale.US)
             text = sdf.format(Date())
             setTextColor(Color.WHITE)
-            textSize = 12f
+            textSize = 9.5f * scale
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(0, 0, 0, dpToPx(10))
+            setPadding(0, 0, 0, dpToPx((8 * scale).toInt()))
         }
         calendarLayout.addView(calHeader)
 
@@ -698,7 +717,7 @@ class DesktopPresentation(
             val label = TextView(context).apply {
                 text = day
                 setTextColor(Color.parseColor("#64748b"))
-                textSize = 9f
+                textSize = 8f * scale
                 gravity = Gravity.CENTER
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
                 layoutParams = android.widget.GridLayout.LayoutParams().apply {
@@ -720,7 +739,7 @@ class DesktopPresentation(
             val blank = View(context).apply {
                 layoutParams = android.widget.GridLayout.LayoutParams().apply {
                     width = 0
-                    height = dpToPx(22)
+                    height = dpToPx((18 * scale).toInt())
                     columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
                 }
             }
@@ -730,12 +749,12 @@ class DesktopPresentation(
         for (day in 1..maxDays) {
             val cell = TextView(context).apply {
                 text = day.toString()
-                textSize = 9f
+                textSize = 8f * scale
                 gravity = Gravity.CENTER
                 
                 layoutParams = android.widget.GridLayout.LayoutParams().apply {
                     width = 0
-                    height = dpToPx(20)
+                    height = dpToPx((16 * scale).toInt())
                     columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
                 }
 
@@ -743,7 +762,7 @@ class DesktopPresentation(
                     setTextColor(Color.WHITE)
                     val bg = android.graphics.drawable.GradientDrawable().apply {
                         setColor(Color.parseColor("#3584e4"))
-                        cornerRadius = dpToPx(10).toFloat()
+                        cornerRadius = dpToPx((8 * scale).toInt()).toFloat()
                     }
                     background = bg
                 } else {
@@ -765,8 +784,8 @@ class DesktopPresentation(
         rootDropdown.post {
             val location = IntArray(2)
             anchorView.getLocationOnScreen(location)
-            rootDropdown.x = (location[0] - dpToPx(180)).toFloat().coerceAtLeast(0f)
-            rootDropdown.y = (location[1] + anchorView.height + dpToPx(2)).toFloat()
+            rootDropdown.x = (location[0] - dpToPx((180 * scale).toInt())).toFloat().coerceAtLeast(0f)
+            rootDropdown.y = (location[1] + anchorView.height + dpToPx((2 * scale).toInt())).toFloat()
             activeDropdownView = rootDropdown
         }
     }
