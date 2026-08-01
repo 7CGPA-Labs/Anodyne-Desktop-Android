@@ -17,7 +17,8 @@ class DesktopRemoteServer(
     private val port: Int,
     private val getPin: () -> String,
     private val getActiveWebView: () -> WebView?,
-    private val handleRemoteInput: (String, Float, Float) -> Unit
+    private val handleRemoteInput: (String, Float, Float) -> Unit,
+    private val onConnectionActive: (Boolean) -> Unit
 ) {
     private var serverSocket: ServerSocket? = null
     private var isRunning = false
@@ -253,6 +254,8 @@ class DesktopRemoteServer(
             return
         }
 
+        onConnectionActive(true)
+
         val bytesStream = ByteArrayOutputStream()
         val doneSignal = java.util.concurrent.CountDownLatch(1)
 
@@ -289,6 +292,7 @@ class DesktopRemoteServer(
         val y = params["y"]?.toFloatOrNull() ?: 0f
 
         handleRemoteInput(type, x, y)
+        onConnectionActive(true)
 
         sendResponse(socket, "text/plain", "OK".toByteArray())
     }

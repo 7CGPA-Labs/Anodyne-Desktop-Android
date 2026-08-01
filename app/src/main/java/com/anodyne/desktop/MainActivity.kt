@@ -33,6 +33,8 @@ import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Button
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import java.text.SimpleDateFormat
@@ -177,6 +179,20 @@ class MainActivity : AppCompatActivity() {
         override fun onDisplayChanged(displayId: Int) {
             Log.d(TAG, "Display changed: $displayId")
             updatePresentation()
+        }
+    }
+
+    private var isRemoteSharingActive = false
+    private var lastRemoteActivityTime = 0L
+    private lateinit var remoteBanner: LinearLayout
+    private val remoteTimeoutHandler = Handler(Looper.getMainLooper())
+    private val remoteTimeoutRunnable = object : Runnable {
+        override fun run() {
+            if (isRemoteSharingActive && SystemClock.uptimeMillis() - lastRemoteActivityTime > 15 * 60 * 1000) {
+                Log.i(TAG, "Remote session timeout: stopping sharing")
+                stopRemoteSharing()
+            }
+            remoteTimeoutHandler.postDelayed(this, 10000)
         }
     }
 
@@ -349,9 +365,56 @@ class MainActivity : AppCompatActivity() {
             }
         }
         rightContainer.addView(scaleToggle)
+
+        // "Get Help" remote assistance trigger button
+        val getHelpToggle = TextView(this).apply {
+            text = "🤝 Get Help"
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 8.5f
+            setPadding(dpToPx(4), 0, dpToPx(4), 0)
+            setOnClickListener {
+                showRemoteHelpDialog()
+            }
+        }
+        rightContainer.addView(getHelpToggle)
         topBar.addView(rightContainer)
 
         rootLayout.addView(topBar)
+
+        // Overhead Remote session active banner
+        remoteBanner = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(24)
+            )
+            setBackgroundColor(Color.parseColor("#dc2626"))
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dpToPx(16), 0, dpToPx(16), 0)
+            visibility = View.GONE
+        }
+
+        val bannerText = TextView(this).apply {
+            text = "🔴 Remote Control Active — Connected to Tech Support"
+            setTextColor(Color.WHITE)
+            textSize = 9f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        remoteBanner.addView(bannerText)
+
+        val stopButton = Button(this).apply {
+            text = "Stop Sharing"
+            textSize = 8.5f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#991b1b"))
+            setPadding(dpToPx(8), 0, dpToPx(8), 0)
+            setOnClickListener {
+                stopRemoteSharing()
+            }
+        }
+        remoteBanner.addView(stopButton)
+        rootLayout.addView(remoteBanner)
 
         rootLayout.addView(View(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
@@ -497,10 +560,25 @@ class MainActivity : AppCompatActivity() {
                         hoverEvent.recycle()
                     }
                 }
+            },
+            onConnectionActive = { active ->
+                runOnUiThread {
+                    if (active) {
+                        lastRemoteActivityTime = SystemClock.uptimeMillis()
+                        if (!isRemoteSharingActive) {
+                            isRemoteSharingActive = true
+                            remoteBanner.visibility = View.VISIBLE
+                            presentation?.updateRemoteSharingStatus(true)
+                        }
+                    }
+                }
             }
         ).apply {
             start()
         }
+
+        // Start remote inactivity timeout monitor
+        remoteTimeoutHandler.post(remoteTimeoutRunnable)
 
         // Register display listener for casting monitors
         displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
@@ -575,8 +653,42 @@ class MainActivity : AppCompatActivity() {
                 toggleSpotlightSearch()
                 return true
             }
+
+            // 7. Escape key to stop remote sharing
+            if (keyCode == android.view.KeyEvent.KEYCODE_ESCAPE) {
+                if (isRemoteSharingActive) {
+                    stopRemoteSharing()
+                    return true
+                }
+            }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    private fun showRemoteHelpDialog() {
+        val ipAddress = getLocalIpAddress()
+        AlertDialog.Builder(this)
+            .setTitle("Get Remote Help")
+            .setMessage("Share your screen with a technician or family member by reading this code to them:\n\nPIN: $accessPin\n\nThey can connect at:\nhttp://$ipAddress:8080")
+            .setPositiveButton("Start Sharing") { _, _ ->
+                startRemoteSharing()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun startRemoteSharing() {
+        isRemoteSharingActive = true
+        lastRemoteActivityTime = SystemClock.uptimeMillis()
+        remoteBanner.visibility = View.VISIBLE
+        presentation?.updateRemoteSharingStatus(true)
+    }
+
+    private fun stopRemoteSharing() {
+        isRemoteSharingActive = false
+        remoteBanner.visibility = View.GONE
+        presentation?.updateRemoteSharingStatus(false)
+        Toast.makeText(this, "Remote session disconnected", Toast.LENGTH_SHORT).show()
     }
 
     // Lubuntu LXQt-style App Drawer cascading menu implementation

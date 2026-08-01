@@ -107,6 +107,15 @@ class DesktopPresentation(
     private var activeSubmenuView: View? = null
 
     private var currentScale = 1.0f
+    private var isRemoteSharingActive = false
+    private lateinit var remoteBanner: LinearLayout
+
+    fun updateRemoteSharingStatus(active: Boolean) {
+        clockHandler.post {
+            isRemoteSharingActive = active
+            remoteBanner.visibility = if (active) View.VISIBLE else View.GONE
+        }
+    }
 
     fun updatePresentationScale(scale: Float) {
         clockHandler.post {
@@ -258,6 +267,28 @@ class DesktopPresentation(
         topBar.addView(rightContainer)
 
         rootLayout.addView(topBar)
+
+        // Overhead Remote session active banner
+        remoteBanner = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(24)
+            )
+            setBackgroundColor(Color.parseColor("#dc2626"))
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dpToPx(16), 0, dpToPx(16), 0)
+            visibility = View.GONE
+        }
+
+        val bannerText = TextView(context).apply {
+            text = "🔴 Remote Control Active — Connected to Tech Support"
+            setTextColor(Color.WHITE)
+            textSize = 9f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }
+        remoteBanner.addView(bannerText)
+        rootLayout.addView(remoteBanner)
 
         rootLayout.addView(View(context).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
