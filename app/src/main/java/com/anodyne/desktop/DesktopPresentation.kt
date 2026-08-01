@@ -106,6 +106,48 @@ class DesktopPresentation(
     private var activeDropdownView: View? = null
     private var activeSubmenuView: View? = null
 
+    private var currentScale = 1.0f
+
+    fun updatePresentationScale(scale: Float) {
+        clockHandler.post {
+            currentScale = scale
+            applyUiScale()
+        }
+    }
+
+    private fun applyUiScale() {
+        topBar.layoutParams.height = dpToPx((22 * currentScale).toInt())
+        topBar.requestLayout()
+
+        tabScroll.layoutParams.height = dpToPx((28 * currentScale).toInt())
+        tabScroll.requestLayout()
+
+        for (i in 0 until leftContainer.childCount) {
+            (leftContainer.getChildAt(i) as? TextView)?.apply {
+                textSize = 8.5f * currentScale
+                if (this == logoText) {
+                    textSize = 11f * currentScale
+                }
+            }
+        }
+
+        clockTextView.textSize = 8.5f * currentScale
+
+        val rightContainer = topBar.getChildAt(2) as? LinearLayout
+        if (rightContainer != null) {
+            for (i in 0 until rightContainer.childCount) {
+                (rightContainer.getChildAt(i) as? TextView)?.textSize = 8.5f * currentScale
+            }
+        }
+
+        refreshTabUI()
+
+        val zoomLevel = (currentScale * 100).toInt()
+        for (tab in tabsList) {
+            tab.webView.settings.textZoom = zoomLevel
+        }
+    }
+
     private val clockHandler = Handler(Looper.getMainLooper())
     private val clockRunnable = object : Runnable {
         override fun run() {
@@ -1454,6 +1496,45 @@ class DesktopPresentation(
                                 baselineStyle.innerHTML = '* { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; touch-action: manipulation !important; } input, textarea, [contenteditable=true] { -webkit-user-select: text !important; user-select: text !important; }';
                                 document.head.appendChild(baselineStyle);
                             }
+
+                            // Fail-Safe Tab form recovery script (Auto-save drafts & scroll positions)
+                            (function() {
+                                var tabKey = "tab_draft_" + window.location.href;
+                                try {
+                                    var data = JSON.parse(localStorage.getItem(tabKey));
+                                    if (data) {
+                                        for (var selector in (data.inputs || {})) {
+                                            var el = document.querySelector(selector);
+                                            if (el && el.value !== data.inputs[selector]) {
+                                                el.value = data.inputs[selector];
+                                                el.dispatchEvent(new Event('input', { bubbles: true }));
+                                            }
+                                        }
+                                        if (data.scroll) {
+                                            window.scrollTo(data.scroll.x, data.scroll.y);
+                                        }
+                                    }
+                                } catch (e) {}
+
+                                setInterval(function() {
+                                    try {
+                                        var inputs = {};
+                                        document.querySelectorAll("input, textarea").forEach(function(el, idx) {
+                                            var sel = el.id ? "#" + el.id : "";
+                                            if (!sel && el.name) sel = el.tagName.toLowerCase() + "[name='" + el.name + "']";
+                                            if (!sel) sel = el.tagName.toLowerCase() + ":nth-of-type(" + (idx + 1) + ")";
+                                            if (el.type !== "password") {
+                                                inputs[sel] = el.value;
+                                            }
+                                        });
+                                        var data = {
+                                            inputs: inputs,
+                                            scroll: { x: window.scrollX, y: window.scrollY }
+                                        };
+                                        localStorage.setItem(tabKey, JSON.stringify(data));
+                                    } catch (e) {}
+                                }, 5000);
+                            })();
                             
                             // Focus state detection for virtual keyboard integration (presentation parity)
                             if (window.hasKeyboardListener) return;
@@ -1556,6 +1637,36 @@ class DesktopPresentation(
     private fun closeTab(tab: TabItem) {
         if (tab.id == "home") return
 
+        val checkJs = """
+            (function() {
+                var dirty = false;
+                document.querySelectorAll("input, textarea").forEach(function(el) {
+                    if (el.value && el.value.trim() !== "" && el.type !== "submit" && el.type !== "button" && el.type !== "hidden") {
+                        dirty = true;
+                    }
+                });
+                return dirty;
+            })();
+        """.trimIndent()
+
+        tab.webView.evaluateJavascript(checkJs) { result ->
+            val isDirty = result?.toBoolean() ?: false
+            if (isDirty) {
+                AlertDialog.Builder(context)
+                    .setTitle("Unsaved Changes")
+                    .setMessage("You have unsaved changes in this tab. Close anyway?")
+                    .setPositiveButton("Close Tab") { _, _ ->
+                        executeCloseTab(tab)
+                    }
+                    .setNegativeButton("Keep Open", null)
+                    .show()
+            } else {
+                executeCloseTab(tab)
+            }
+        }
+    }
+
+    private fun executeCloseTab(tab: TabItem) {
         val index = tabsList.indexOf(tab)
         if (index == -1) return
 
@@ -1583,11 +1694,11 @@ class DesktopPresentation(
             val tabItem = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(
-                    dpToPx(100),
+                    dpToPx((100 * currentScale).toInt()),
                     LinearLayout.LayoutParams.MATCH_PARENT
                 ).apply {
-                    topMargin = dpToPx(3)
-                    rightMargin = dpToPx(2)
+                    topMargin = dpToPx((3 * currentScale).toInt())
+                    rightMargin = dpToPx((2 * currentScale).toInt())
                 }
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dpToPx(8), 0, dpToPx(6), 0)
@@ -1607,7 +1718,7 @@ class DesktopPresentation(
             val titleText = TextView(context).apply {
                 text = tab.title
                 setTextColor(Color.parseColor(if (isActive) "#f8fafc" else "#94a3b8"))
-                textSize = 8.5f
+                textSize = 8.5f * currentScale
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
                 layoutParams = LinearLayout.LayoutParams(
@@ -1622,7 +1733,7 @@ class DesktopPresentation(
                 val closeBtn = TextView(context).apply {
                     text = " × "
                     setTextColor(Color.parseColor(if (isActive) "#94a3b8" else "#64748b"))
-                    textSize = 10f
+                    textSize = 10f * currentScale
                     gravity = Gravity.CENTER
                     setPadding(dpToPx(2), dpToPx(1), dpToPx(2), dpToPx(1))
                     val btnBg = android.graphics.drawable.GradientDrawable().apply {

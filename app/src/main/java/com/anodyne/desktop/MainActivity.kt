@@ -115,6 +115,43 @@ class MainActivity : AppCompatActivity() {
     private var activeDropdownView: View? = null
     private var activeSubmenuView: View? = null
 
+    private var currentScale = 1.0f
+
+    private fun applyUiScale() {
+        runOnUiThread {
+            topBar.layoutParams.height = dpToPx((22 * currentScale).toInt())
+            topBar.requestLayout()
+
+            tabScroll.layoutParams.height = dpToPx((28 * currentScale).toInt())
+            tabScroll.requestLayout()
+
+            for (i in 0 until leftContainer.childCount) {
+                (leftContainer.getChildAt(i) as? TextView)?.apply {
+                    textSize = 8.5f * currentScale
+                    if (this == logoText) {
+                        textSize = 11f * currentScale
+                    }
+                }
+            }
+
+            clockTextView.textSize = 8.5f * currentScale
+
+            val rightContainer = topBar.getChildAt(2) as? LinearLayout
+            if (rightContainer != null) {
+                for (i in 0 until rightContainer.childCount) {
+                    (rightContainer.getChildAt(i) as? TextView)?.textSize = 8.5f * currentScale
+                }
+            }
+
+            refreshTabUI()
+
+            val zoomLevel = (currentScale * 100).toInt()
+            for (tab in tabsList) {
+                tab.webView.settings.textZoom = zoomLevel
+            }
+        }
+    }
+
     private lateinit var displayManager: DisplayManager
     private var presentation: DesktopPresentation? = null
 
@@ -293,6 +330,25 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { showBatteryDropdown() }
         }
         rightContainer.addView(batteryTextView)
+
+        // Accessibility Text Scale Toggle Button (100% -> 125% -> 150%)
+        val scaleToggle = TextView(this).apply {
+            text = "🔍 100%"
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 8.5f
+            setPadding(dpToPx(4), 0, dpToPx(4), 0)
+            setOnClickListener {
+                currentScale = when (currentScale) {
+                    1.0f -> 1.25f
+                    1.25f -> 1.5f
+                    else -> 1.0f
+                }
+                text = "🔍 ${(currentScale * 100).toInt()}%"
+                applyUiScale()
+                presentation?.updatePresentationScale(currentScale)
+            }
+        }
+        rightContainer.addView(scaleToggle)
         topBar.addView(rightContainer)
 
         rootLayout.addView(topBar)
@@ -1420,6 +1476,45 @@ class MainActivity : AppCompatActivity() {
                                 baselineStyle.innerHTML = '* { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; touch-action: manipulation !important; } input, textarea, [contenteditable=true] { -webkit-user-select: text !important; user-select: text !important; }';
                                 document.head.appendChild(baselineStyle);
                             }
+
+                            // Fail-Safe Tab form recovery script (Auto-save drafts & scroll positions)
+                            (function() {
+                                var tabKey = "tab_draft_" + window.location.href;
+                                try {
+                                    var data = JSON.parse(localStorage.getItem(tabKey));
+                                    if (data) {
+                                        for (var selector in (data.inputs || {})) {
+                                            var el = document.querySelector(selector);
+                                            if (el && el.value !== data.inputs[selector]) {
+                                                el.value = data.inputs[selector];
+                                                el.dispatchEvent(new Event('input', { bubbles: true }));
+                                            }
+                                        }
+                                        if (data.scroll) {
+                                            window.scrollTo(data.scroll.x, data.scroll.y);
+                                        }
+                                    }
+                                } catch (e) {}
+
+                                setInterval(function() {
+                                    try {
+                                        var inputs = {};
+                                        document.querySelectorAll("input, textarea").forEach(function(el, idx) {
+                                            var sel = el.id ? "#" + el.id : "";
+                                            if (!sel && el.name) sel = el.tagName.toLowerCase() + "[name='" + el.name + "']";
+                                            if (!sel) sel = el.tagName.toLowerCase() + ":nth-of-type(" + (idx + 1) + ")";
+                                            if (el.type !== "password") {
+                                                inputs[sel] = el.value;
+                                            }
+                                        });
+                                        var data = {
+                                            inputs: inputs,
+                                            scroll: { x: window.scrollX, y: window.scrollY }
+                                        };
+                                        localStorage.setItem(tabKey, JSON.stringify(data));
+                                    } catch (e) {}
+                                }, 5000);
+                            })();
                             
                             // Focus state detection for virtual keyboard integration
                             if (window.hasKeyboardListener) return;
@@ -1524,6 +1619,36 @@ class MainActivity : AppCompatActivity() {
     private fun closeTab(tab: TabItem) {
         if (tab.id == "home") return
 
+        val checkJs = """
+            (function() {
+                var dirty = false;
+                document.querySelectorAll("input, textarea").forEach(function(el) {
+                    if (el.value && el.value.trim() !== "" && el.type !== "submit" && el.type !== "button" && el.type !== "hidden") {
+                        dirty = true;
+                    }
+                });
+                return dirty;
+            })();
+        """.trimIndent()
+
+        tab.webView.evaluateJavascript(checkJs) { result ->
+            val isDirty = result?.toBoolean() ?: false
+            if (isDirty) {
+                AlertDialog.Builder(this)
+                    .setTitle("Unsaved Changes")
+                    .setMessage("You have unsaved changes in this tab. Close anyway?")
+                    .setPositiveButton("Close Tab") { _, _ ->
+                        executeCloseTab(tab)
+                    }
+                    .setNegativeButton("Keep Open", null)
+                    .show()
+            } else {
+                executeCloseTab(tab)
+            }
+        }
+    }
+
+    private fun executeCloseTab(tab: TabItem) {
         val index = tabsList.indexOf(tab)
         if (index == -1) return
 
@@ -1551,11 +1676,11 @@ class MainActivity : AppCompatActivity() {
             val tabItem = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(
-                    dpToPx(100),
+                    dpToPx((100 * currentScale).toInt()),
                     LinearLayout.LayoutParams.MATCH_PARENT
                 ).apply {
-                    topMargin = dpToPx(3)
-                    rightMargin = dpToPx(2)
+                    topMargin = dpToPx((3 * currentScale).toInt())
+                    rightMargin = dpToPx((2 * currentScale).toInt())
                 }
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dpToPx(8), 0, dpToPx(6), 0)
@@ -1575,7 +1700,7 @@ class MainActivity : AppCompatActivity() {
             val titleText = TextView(this).apply {
                 text = tab.title
                 setTextColor(Color.parseColor(if (isActive) "#f8fafc" else "#94a3b8"))
-                textSize = 8.5f
+                textSize = 8.5f * currentScale
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
                 layoutParams = LinearLayout.LayoutParams(
@@ -1590,7 +1715,7 @@ class MainActivity : AppCompatActivity() {
                 val closeBtn = TextView(this).apply {
                     text = " × "
                     setTextColor(Color.parseColor(if (isActive) "#94a3b8" else "#64748b"))
-                    textSize = 10f
+                    textSize = 10f * currentScale
                     gravity = Gravity.CENTER
                     setPadding(dpToPx(2), dpToPx(1), dpToPx(2), dpToPx(1))
                     val btnBg = android.graphics.drawable.GradientDrawable().apply {
@@ -1699,7 +1824,7 @@ class MainActivity : AppCompatActivity() {
         spotlightInput = EditText(this).apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             background = null
-            hint = "Spotlight Search..."
+            hint = "Type what you want to do (e.g. 'Open Files', 'Wi-Fi')..."
             setHintTextColor(Color.parseColor("#475569"))
             setTextColor(Color.WHITE)
             textSize = 14f
@@ -1721,30 +1846,106 @@ class MainActivity : AppCompatActivity() {
         }
         searchPanel.addView(spotlightInput)
         spotlightOverlay.addView(searchPanel)
+
+        // Pinned & Recent App Shortcuts directly under the search panel
+        val shortcutsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = FrameLayout.LayoutParams(
+                dpToPx(480),
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = dpToPx(165)
+            }
+            gravity = Gravity.CENTER
+        }
+
+        val addShortcut = { iconStr: String, labelStr: String, action: () -> Unit ->
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dpToPx(12), dpToPx(8), dpToPx(12), dpToPx(8))
+                val bg = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.parseColor("#1a1a26"))
+                    cornerRadius = dpToPx(8).toFloat()
+                }
+                background = bg
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(
+                    dpToPx(90),
+                    dpToPx(65)
+                ).apply {
+                    leftMargin = dpToPx(8)
+                    rightMargin = dpToPx(8)
+                }
+                setOnClickListener {
+                    hideSpotlightSearch()
+                    action()
+                }
+            }
+            val iconView = TextView(this).apply {
+                text = iconStr
+                textSize = 18f
+                gravity = Gravity.CENTER
+            }
+            val labelView = TextView(this).apply {
+                text = labelStr
+                setTextColor(Color.WHITE)
+                textSize = 9f
+                setPadding(0, dpToPx(4), 0, 0)
+                gravity = Gravity.CENTER
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+            }
+            card.addView(iconView)
+            card.addView(labelView)
+            shortcutsRow.addView(card)
+        }
+
+        addShortcut("📁", "Files") { openOrSwitchTab("files", "file:///android_asset/files/index.html", "Files") }
+        addShortcut("⚙️", "Settings") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") }
+        addShortcut("🌐", "Browser") { openOrSwitchTab("web_browser_" + System.currentTimeMillis(), "https://www.google.com", "Browser") }
+        addShortcut("📅", "Calendar") { showGnomeCalendarDropdown(clockTextView) }
+
+        spotlightOverlay.addView(shortcutsRow)
         workspaceContainer.addView(spotlightOverlay)
     }
 
     private fun triggerSpotlightSearch(query: String) {
-        val trimmed = query.trim()
+        val trimmed = query.trim().lowercase(Locale.US)
         if (trimmed.isEmpty()) return
 
-        val isUrl = trimmed.contains(".") && !trimmed.contains(" ")
-        val targetUrl = if (isUrl) {
-            if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
-                "https://$trimmed"
-            } else {
-                trimmed
+        when {
+            trimmed.contains("print") || trimmed.contains("contract") || trimmed.contains("file") || trimmed.contains("pdf") || trimmed.contains("documents") || trimmed.contains("nautilus") -> {
+                openOrSwitchTab("files", "file:///android_asset/files/index.html", "Files")
             }
-        } else {
-            try {
-                "https://www.google.com/search?q=" + java.net.URLEncoder.encode(trimmed, "UTF-8")
-            } catch (e: Exception) {
-                "https://www.google.com/search?q=$trimmed"
+            trimmed.contains("settings") || trimmed.contains("system") || trimmed.contains("control") || trimmed.contains("wifi") || trimmed.contains("network") || trimmed.contains("battery") || trimmed.contains("power") -> {
+                openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings")
+            }
+            trimmed.contains("calendar") || trimmed.contains("clock") || trimmed.contains("time") || trimmed.contains("date") || trimmed.contains("schedule") -> {
+                showGnomeCalendarDropdown(clockTextView)
+            }
+            trimmed.contains("calc") || trimmed.contains("calculator") || trimmed.contains("math") || trimmed.contains("compute") || trimmed.contains("budget") -> {
+                openOrSwitchTab("home", "file:///android_asset/homepage/index.html", "Dashboard")
+            }
+            else -> {
+                val isUrl = trimmed.contains(".") && !trimmed.contains(" ")
+                val targetUrl = if (isUrl) {
+                    if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+                        "https://$trimmed"
+                    } else {
+                        trimmed
+                    }
+                } else {
+                    try {
+                        "https://www.google.com/search?q=" + java.net.URLEncoder.encode(query.trim(), "UTF-8")
+                    } catch (e: Exception) {
+                        "https://www.google.com/search?q=$trimmed"
+                    }
+                }
+
+                val tabTitle = if (isUrl) query.trim() else "Search: ${query.trim()}"
+                openOrSwitchTab("web_" + System.currentTimeMillis(), targetUrl, tabTitle)
             }
         }
-
-        val tabTitle = if (isUrl) trimmed else "Search: $trimmed"
-        openOrSwitchTab("web_" + System.currentTimeMillis(), targetUrl, tabTitle)
     }
 
     private fun toggleSpotlightSearch() {
