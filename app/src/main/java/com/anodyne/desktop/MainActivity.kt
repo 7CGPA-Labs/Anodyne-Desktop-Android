@@ -469,10 +469,52 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Intercept hardware key commands (Command/Windows key)
+    // Intercept hardware key commands and global shortcuts
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
         if (event.action == android.view.KeyEvent.ACTION_DOWN) {
             val keyCode = event.keyCode
+            val isMeta = event.isMetaPressed
+            val isCtrl = event.isCtrlPressed
+
+            // 1. Cmd/Ctrl + Space to toggle Spotlight Search
+            if ((isMeta || isCtrl) && keyCode == android.view.KeyEvent.KEYCODE_SPACE) {
+                toggleSpotlightSearch()
+                return true
+            }
+
+            // 2. Ctrl + W to close active tab (excluding pinned home)
+            if (isCtrl && keyCode == android.view.KeyEvent.KEYCODE_W) {
+                getActiveTabItem()?.let { closeTab(it) }
+                return true
+            }
+
+            // 3. Ctrl + T to open a new tab
+            if (isCtrl && keyCode == android.view.KeyEvent.KEYCODE_T) {
+                openOrSwitchTab("web_" + System.currentTimeMillis(), "file:///android_asset/homepage/index.html", "New Tab")
+                return true
+            }
+
+            // 4. Ctrl + R to reload active page
+            if (isCtrl && keyCode == android.view.KeyEvent.KEYCODE_R) {
+                getActiveWebView()?.reload()
+                return true
+            }
+
+            // 5. Ctrl + Tab / Ctrl + Shift + Tab to cycle tabs
+            if (isCtrl && keyCode == android.view.KeyEvent.KEYCODE_TAB) {
+                if (tabsList.isNotEmpty()) {
+                    if (event.isShiftPressed) {
+                        val prevIdx = (currentTabIndex - 1 + tabsList.size) % tabsList.size
+                        switchTab(prevIdx)
+                    } else {
+                        val nextIdx = (currentTabIndex + 1) % tabsList.size
+                        switchTab(nextIdx)
+                    }
+                }
+                return true
+            }
+
+            // 6. Support physical Meta (Command/Win) key click as fallback
             if (keyCode == android.view.KeyEvent.KEYCODE_META_LEFT || keyCode == android.view.KeyEvent.KEYCODE_META_RIGHT) {
                 toggleSpotlightSearch()
                 return true
@@ -1331,6 +1373,9 @@ class MainActivity : AppCompatActivity() {
             isHorizontalScrollBarEnabled = true
             isVerticalScrollBarEnabled = true
 
+            // Disable long click to prevent mobile selection handle tropes
+            setOnLongClickListener { true }
+
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
@@ -1365,6 +1410,15 @@ class MainActivity : AppCompatActivity() {
                                 sbStyle.id = 'scrollbar-style';
                                 sbStyle.innerHTML = '::-webkit-scrollbar { width: 8px !important; height: 8px !important; } ::-webkit-scrollbar-track { background: #0c0c14 !important; } ::-webkit-scrollbar-thumb { background: #475569 !important; border-radius: 4px !important; } ::-webkit-scrollbar-thumb:hover { background: #64748b !important; }';
                                 document.head.appendChild(sbStyle);
+                            }
+
+                            // Inject baseline OS stylesheet to enforce desktop styling (disable user-selection & touch-callouts)
+                            var baselineStyle = document.getElementById('baseline-style');
+                            if (!baselineStyle) {
+                                baselineStyle = document.createElement('style');
+                                baselineStyle.id = 'baseline-style';
+                                baselineStyle.innerHTML = '* { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; touch-action: manipulation !important; } input, textarea, [contenteditable=true] { -webkit-user-select: text !important; user-select: text !important; }';
+                                document.head.appendChild(baselineStyle);
                             }
                             
                             // Focus state detection for virtual keyboard integration

@@ -1404,6 +1404,9 @@ class DesktopPresentation(
             isHorizontalScrollBarEnabled = true
             isVerticalScrollBarEnabled = true
 
+            // Disable long click to prevent mobile selection handle tropes
+            setOnLongClickListener { true }
+
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
@@ -1441,6 +1444,15 @@ class DesktopPresentation(
                                 sbStyle.id = 'scrollbar-style';
                                 sbStyle.innerHTML = '::-webkit-scrollbar { width: 8px !important; height: 8px !important; } ::-webkit-scrollbar-track { background: #0c0c14 !important; } ::-webkit-scrollbar-thumb { background: #475569 !important; border-radius: 4px !important; } ::-webkit-scrollbar-thumb:hover { background: #64748b !important; }';
                                 document.head.appendChild(sbStyle);
+                            }
+
+                            // Inject baseline OS stylesheet to enforce desktop styling (disable user-selection & touch-callouts)
+                            var baselineStyle = document.getElementById('baseline-style');
+                            if (!baselineStyle) {
+                                baselineStyle = document.createElement('style');
+                                baselineStyle.id = 'baseline-style';
+                                baselineStyle.innerHTML = '* { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; touch-action: manipulation !important; } input, textarea, [contenteditable=true] { -webkit-user-select: text !important; user-select: text !important; }';
+                                document.head.appendChild(baselineStyle);
                             }
                             
                             // Focus state detection for virtual keyboard integration (presentation parity)
