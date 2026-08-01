@@ -1220,6 +1220,7 @@ class DesktopPresentation(
     fun showSpotlightSearch() {
         spotlightOverlay.visibility = View.VISIBLE
         spotlightInput.setText("")
+        cursorView.bringToFront()
     }
 
     fun hideSpotlightSearch() {
@@ -1334,6 +1335,7 @@ class DesktopPresentation(
             virtualKeyboardPanel.visibility = View.VISIBLE
             virtualKeyboardPanel.x = (workspaceContainer.width - virtualKeyboardPanel.width) / 2f
             virtualKeyboardPanel.y = workspaceContainer.height - virtualKeyboardPanel.height - dpToPx(20).toFloat()
+            cursorView.bringToFront()
         }
     }
 

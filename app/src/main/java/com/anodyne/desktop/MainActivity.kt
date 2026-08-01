@@ -2107,6 +2107,11 @@ class MainActivity : AppCompatActivity() {
         spotlightInput.requestFocus()
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.showSoftInput(spotlightInput, InputMethodManager.SHOW_IMPLICIT)
+        
+        cursorView.bringToFront()
+        if (isTrackpadMode) {
+            touchpadOverlay.bringToFront()
+        }
     }
 
     fun hideSpotlightSearch() {
@@ -2348,6 +2353,11 @@ class MainActivity : AppCompatActivity() {
             virtualKeyboardPanel.visibility = View.VISIBLE
             virtualKeyboardPanel.x = (workspaceContainer.width - virtualKeyboardPanel.width) / 2f
             virtualKeyboardPanel.y = workspaceContainer.height - virtualKeyboardPanel.height - dpToPx(20).toFloat()
+            
+            cursorView.bringToFront()
+            if (isTrackpadMode) {
+                touchpadOverlay.bringToFront()
+            }
         }
     }
 
