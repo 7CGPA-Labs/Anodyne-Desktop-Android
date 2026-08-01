@@ -1548,6 +1548,7 @@ class MainActivity : AppCompatActivity() {
             domStorageEnabled = true
             allowFileAccess = true
             allowContentAccess = true
+            allowUniversalAccessFromFileURLs = true
             databaseEnabled = true
             loadWithOverviewMode = true
             useWideViewPort = true
