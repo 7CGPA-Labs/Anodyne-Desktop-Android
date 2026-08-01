@@ -950,16 +950,25 @@ class DesktopPresentation(
             dismissActiveDropdown()
         }
 
+        val scale = currentScale
+        val textSz = 9.5f * scale
+        val padLeft = dpToPx((14 * scale).toInt())
+        val padTop = dpToPx((5 * scale).toInt())
+        val padRight = dpToPx((22 * scale).toInt())
+        val padBottom = dpToPx((5 * scale).toInt())
+        val cornerRad = dpToPx((6 * scale).toInt()).toFloat()
+        val elev = dpToPx((6 * scale).toInt()).toFloat()
+
         val popupView = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dpToPx(4), 0, dpToPx(4))
+            setPadding(0, dpToPx((4 * scale).toInt()), 0, dpToPx((4 * scale).toInt()))
             val borderDrawable = android.graphics.drawable.GradientDrawable().apply {
                 setColor(Color.parseColor("#12121a"))
                 setStroke(1, Color.parseColor("#2a2a3a"))
-                cornerRadius = dpToPx(8).toFloat()
+                cornerRadius = cornerRad
             }
             background = borderDrawable
-            elevation = dpToPx(8).toFloat()
+            elevation = elev
         }
 
         for (item in menuItems) {
@@ -969,7 +978,7 @@ class DesktopPresentation(
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         1
                     ).apply {
-                        setMargins(0, dpToPx(4), 0, dpToPx(4))
+                        setMargins(0, dpToPx((3 * scale).toInt()), 0, dpToPx((3 * scale).toInt()))
                     }
                     setBackgroundColor(Color.parseColor("#2a2a3a"))
                 }
@@ -978,8 +987,8 @@ class DesktopPresentation(
                 val row = TextView(context).apply {
                     text = item.title
                     setTextColor(Color.parseColor("#e2e8f0"))
-                    textSize = 12f
-                    setPadding(dpToPx(16), dpToPx(6), dpToPx(24), dpToPx(6))
+                    textSize = textSz
+                    setPadding(padLeft, padTop, padRight, padBottom)
                     gravity = Gravity.CENTER_VERTICAL
                     val hoverBg = android.graphics.drawable.StateListDrawable().apply {
                         addState(intArrayOf(android.R.attr.state_focused), android.graphics.drawable.ColorDrawable(Color.parseColor("#3584e4")))

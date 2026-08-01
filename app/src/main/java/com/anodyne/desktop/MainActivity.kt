@@ -917,16 +917,25 @@ class MainActivity : AppCompatActivity() {
     private fun showLxqtAppDrawer(anchorView: View) {
         dismissActiveDropdown()
 
+        val scale = currentScale
+        val textSz = 9.5f * scale
+        val padLeft = dpToPx((14 * scale).toInt())
+        val padTop = dpToPx((5 * scale).toInt())
+        val padRight = dpToPx((22 * scale).toInt())
+        val padBottom = dpToPx((5 * scale).toInt())
+        val cornerRad = dpToPx((6 * scale).toInt()).toFloat()
+        val elev = dpToPx((6 * scale).toInt()).toFloat()
+
         val popupView = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dpToPx(4), 0, dpToPx(4))
+            setPadding(0, dpToPx((4 * scale).toInt()), 0, dpToPx((4 * scale).toInt()))
             val borderDrawable = android.graphics.drawable.GradientDrawable().apply {
                 setColor(Color.parseColor("#12121a"))
                 setStroke(1, Color.parseColor("#2a2a3a"))
-                cornerRadius = dpToPx(8).toFloat()
+                cornerRadius = cornerRad
             }
             background = borderDrawable
-            elevation = dpToPx(8).toFloat()
+            elevation = elev
         }
 
         val menuItems = listOf(
@@ -946,7 +955,7 @@ class MainActivity : AppCompatActivity() {
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         1
                     ).apply {
-                        setMargins(0, dpToPx(4), 0, dpToPx(4))
+                        setMargins(0, dpToPx((3 * scale).toInt()), 0, dpToPx((3 * scale).toInt()))
                     }
                     setBackgroundColor(Color.parseColor("#2a2a3a"))
                 }
@@ -955,8 +964,8 @@ class MainActivity : AppCompatActivity() {
                 val row = TextView(this).apply {
                     text = item.title
                     setTextColor(Color.parseColor("#e2e8f0"))
-                    textSize = 11f
-                    setPadding(dpToPx(16), dpToPx(6), dpToPx(24), dpToPx(6))
+                    textSize = textSz
+                    setPadding(padLeft, padTop, padRight, padBottom)
                     gravity = Gravity.CENTER_VERTICAL
                     val hoverBg = android.graphics.drawable.StateListDrawable().apply {
                         addState(intArrayOf(android.R.attr.state_pressed), android.graphics.drawable.ColorDrawable(Color.parseColor("#3584e4")))
@@ -1081,35 +1090,36 @@ class MainActivity : AppCompatActivity() {
     private fun showGnomeCalendarDropdown(anchorView: View) {
         dismissActiveDropdown()
 
-        val popupWidth = dpToPx(480)
-        val popupHeight = dpToPx(280)
+        val scale = currentScale
+        val popupWidth = dpToPx((380 * scale).toInt())
+        val popupHeight = dpToPx((230 * scale).toInt())
         
         val rootDropdown = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
+            setPadding(dpToPx((12 * scale).toInt()), dpToPx((12 * scale).toInt()), dpToPx((12 * scale).toInt()), dpToPx((12 * scale).toInt()))
             val borderDrawable = android.graphics.drawable.GradientDrawable().apply {
                 setColor(Color.parseColor("#f912121a")) // Glassmorphism
-                setStroke(2, Color.parseColor("#2a2a3a"))
-                cornerRadius = dpToPx(12).toFloat()
+                setStroke((1.5f * scale).toInt().coerceAtLeast(1), Color.parseColor("#2a2a3a"))
+                cornerRadius = dpToPx((10 * scale).toInt()).toFloat()
             }
             background = borderDrawable
-            elevation = dpToPx(16).toFloat()
+            elevation = dpToPx((12 * scale).toInt()).toFloat()
         }
 
         // --- Left Column: Notifications ---
         val notificationsLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.1f).apply {
-                rightMargin = dpToPx(16)
+                rightMargin = dpToPx((12 * scale).toInt())
             }
         }
 
         val notifHeader = TextView(this).apply {
             text = "Notifications"
             setTextColor(Color.parseColor("#94a3b8"))
-            textSize = 12f
+            textSize = 9.5f * scale
             typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setPadding(0, 0, 0, dpToPx(10))
+            setPadding(0, 0, 0, dpToPx((8 * scale).toInt()))
         }
         notificationsLayout.addView(notifHeader)
 
@@ -1128,17 +1138,17 @@ class MainActivity : AppCompatActivity() {
         val addNotification = { titleStr: String, textStr: String, timeStr: String ->
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dpToPx(8), dpToPx(8), dpToPx(8), dpToPx(8))
+                setPadding(dpToPx((6 * scale).toInt()), dpToPx((6 * scale).toInt()), dpToPx((6 * scale).toInt()), dpToPx((6 * scale).toInt()))
                 val bg = android.graphics.drawable.GradientDrawable().apply {
                     setColor(Color.parseColor("#1a1a26"))
-                    cornerRadius = dpToPx(6).toFloat()
+                    cornerRadius = dpToPx((5 * scale).toInt()).toFloat()
                 }
                 background = bg
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    bottomMargin = dpToPx(8)
+                    bottomMargin = dpToPx((6 * scale).toInt())
                 }
             }
             
@@ -1148,14 +1158,14 @@ class MainActivity : AppCompatActivity() {
             val titleText = TextView(this).apply {
                 text = titleStr
                 setTextColor(Color.WHITE)
-                textSize = 10f
+                textSize = 8.5f * scale
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             }
             val timeText = TextView(this).apply {
                 text = timeStr
                 setTextColor(Color.parseColor("#64748b"))
-                textSize = 8f
+                textSize = 7f * scale
             }
             tRow.addView(titleText)
             tRow.addView(timeText)
@@ -1164,8 +1174,8 @@ class MainActivity : AppCompatActivity() {
             val descText = TextView(this).apply {
                 text = textStr
                 setTextColor(Color.parseColor("#94a3b8"))
-                textSize = 9f
-                setPadding(0, dpToPx(2), 0, 0)
+                textSize = 8f * scale
+                setPadding(0, dpToPx((2 * scale).toInt()), 0, 0)
             }
             item.addView(descText)
             notifList.addView(item)
@@ -1181,10 +1191,10 @@ class MainActivity : AppCompatActivity() {
 
         val divider = View(this).apply {
             layoutParams = LinearLayout.LayoutParams(
-                dpToPx(1),
+                dpToPx((1 * scale).toInt().coerceAtLeast(1)),
                 ViewGroup.LayoutParams.MATCH_PARENT
             ).apply {
-                rightMargin = dpToPx(16)
+                rightMargin = dpToPx((12 * scale).toInt())
             }
             setBackgroundColor(Color.parseColor("#2a2a3a"))
         }
@@ -1200,10 +1210,10 @@ class MainActivity : AppCompatActivity() {
             val sdf = SimpleDateFormat("MMMM yyyy", Locale.US)
             text = sdf.format(Date())
             setTextColor(Color.WHITE)
-            textSize = 12f
+            textSize = 9.5f * scale
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(0, 0, 0, dpToPx(10))
+            setPadding(0, 0, 0, dpToPx((8 * scale).toInt()))
         }
         calendarLayout.addView(calHeader)
 
@@ -1221,7 +1231,7 @@ class MainActivity : AppCompatActivity() {
             val label = TextView(this).apply {
                 text = day
                 setTextColor(Color.parseColor("#64748b"))
-                textSize = 9f
+                textSize = 8f * scale
                 gravity = Gravity.CENTER
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
                 layoutParams = android.widget.GridLayout.LayoutParams().apply {
@@ -1243,7 +1253,7 @@ class MainActivity : AppCompatActivity() {
             val blank = View(this).apply {
                 layoutParams = android.widget.GridLayout.LayoutParams().apply {
                     width = 0
-                    height = dpToPx(22)
+                    height = dpToPx((18 * scale).toInt())
                     columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
                 }
             }
@@ -1253,12 +1263,12 @@ class MainActivity : AppCompatActivity() {
         for (day in 1..maxDays) {
             val cell = TextView(this).apply {
                 text = day.toString()
-                textSize = 9f
+                textSize = 8f * scale
                 gravity = Gravity.CENTER
                 
                 layoutParams = android.widget.GridLayout.LayoutParams().apply {
                     width = 0
-                    height = dpToPx(20)
+                    height = dpToPx((16 * scale).toInt())
                     columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
                 }
 
@@ -1266,7 +1276,7 @@ class MainActivity : AppCompatActivity() {
                     setTextColor(Color.WHITE)
                     val bg = android.graphics.drawable.GradientDrawable().apply {
                         setColor(Color.parseColor("#3584e4"))
-                        cornerRadius = dpToPx(10).toFloat()
+                        cornerRadius = dpToPx((8 * scale).toInt()).toFloat()
                     }
                     background = bg
                 } else {
@@ -1288,8 +1298,8 @@ class MainActivity : AppCompatActivity() {
         rootDropdown.post {
             val location = IntArray(2)
             anchorView.getLocationOnScreen(location)
-            rootDropdown.x = (location[0] - dpToPx(180)).toFloat().coerceAtLeast(0f)
-            rootDropdown.y = (location[1] + anchorView.height + dpToPx(2)).toFloat()
+            rootDropdown.x = (location[0] - dpToPx((180 * scale).toInt())).toFloat().coerceAtLeast(0f)
+            rootDropdown.y = (location[1] + anchorView.height + dpToPx((2 * scale).toInt())).toFloat()
             activeDropdownView = rootDropdown
         }
     }
@@ -1485,16 +1495,25 @@ class MainActivity : AppCompatActivity() {
             dismissActiveDropdown()
         }
 
+        val scale = currentScale
+        val textSz = 9.5f * scale
+        val padLeft = dpToPx((14 * scale).toInt())
+        val padTop = dpToPx((5 * scale).toInt())
+        val padRight = dpToPx((22 * scale).toInt())
+        val padBottom = dpToPx((5 * scale).toInt())
+        val cornerRad = dpToPx((6 * scale).toInt()).toFloat()
+        val elev = dpToPx((6 * scale).toInt()).toFloat()
+
         val popupView = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dpToPx(4), 0, dpToPx(4))
+            setPadding(0, dpToPx((4 * scale).toInt()), 0, dpToPx((4 * scale).toInt()))
             val borderDrawable = android.graphics.drawable.GradientDrawable().apply {
                 setColor(Color.parseColor("#12121a"))
                 setStroke(1, Color.parseColor("#2a2a3a"))
-                cornerRadius = dpToPx(8).toFloat()
+                cornerRadius = cornerRad
             }
             background = borderDrawable
-            elevation = dpToPx(8).toFloat()
+            elevation = elev
         }
 
         for (item in menuItems) {
@@ -1504,7 +1523,7 @@ class MainActivity : AppCompatActivity() {
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         1
                     ).apply {
-                        setMargins(0, dpToPx(4), 0, dpToPx(4))
+                        setMargins(0, dpToPx((3 * scale).toInt()), 0, dpToPx((3 * scale).toInt()))
                     }
                     setBackgroundColor(Color.parseColor("#2a2a3a"))
                 }
@@ -1513,8 +1532,8 @@ class MainActivity : AppCompatActivity() {
                 val row = TextView(this).apply {
                     text = item.title
                     setTextColor(Color.parseColor("#e2e8f0"))
-                    textSize = 12f
-                    setPadding(dpToPx(16), dpToPx(6), dpToPx(24), dpToPx(6))
+                    textSize = textSz
+                    setPadding(padLeft, padTop, padRight, padBottom)
                     gravity = Gravity.CENTER_VERTICAL
                     val hoverBg = android.graphics.drawable.StateListDrawable().apply {
                         addState(intArrayOf(android.R.attr.state_pressed), android.graphics.drawable.ColorDrawable(Color.parseColor("#3584e4")))
