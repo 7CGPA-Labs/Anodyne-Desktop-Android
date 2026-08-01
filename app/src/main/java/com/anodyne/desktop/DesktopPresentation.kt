@@ -124,6 +124,54 @@ class DesktopPresentation(
         }
     }
 
+    fun updateCursorStyle(colorName: String, sizeName: String) {
+        clockHandler.post {
+            val cursorColor = when (colorName.lowercase(java.util.Locale.US)) {
+                "black" -> Color.BLACK
+                "yellow" -> Color.YELLOW
+                else -> Color.WHITE
+            }
+            val strokeColor = if (cursorColor == Color.BLACK) Color.WHITE else Color.BLACK
+
+            val multiplier = when (sizeName.lowercase(java.util.Locale.US)) {
+                "large" -> 1.5f
+                "extra large" -> 2.0f
+                else -> 1.0f
+            }
+
+            val w = (16 * multiplier).toInt().coerceAtLeast(1)
+            val h = (24 * multiplier).toInt().coerceAtLeast(1)
+            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bmp)
+            
+            val paint = Paint().apply {
+                color = cursorColor
+                style = Paint.Style.FILL
+                isAntiAlias = true
+            }
+            val strokePaint = Paint().apply {
+                color = strokeColor
+                style = Paint.Style.STROKE
+                strokeWidth = 2f * multiplier
+                isAntiAlias = true
+            }
+            val path = Path().apply {
+                moveTo(0f, 0f)
+                lineTo(16f * multiplier, 16f * multiplier)
+                lineTo(9f * multiplier, 16f * multiplier)
+                lineTo(14f * multiplier, 24f * multiplier)
+                lineTo(11f * multiplier, 24f * multiplier)
+                lineTo(6f * multiplier, 16f * multiplier)
+                lineTo(0f * multiplier, 20f * multiplier)
+                close()
+            }
+            canvas.drawPath(path, paint)
+            canvas.drawPath(path, strokePaint)
+
+            cursorView.setImageBitmap(bmp)
+        }
+    }
+
     private fun applyUiScale() {
         topBar.layoutParams.height = dpToPx((22 * currentScale).toInt())
         topBar.requestLayout()

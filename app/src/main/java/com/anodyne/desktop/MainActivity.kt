@@ -179,8 +179,36 @@ class MainActivity : AppCompatActivity() {
         override fun onDisplayChanged(displayId: Int) {
             Log.d(TAG, "Display changed: $displayId")
             updatePresentation()
+            try {
+                val display = displayManager.getDisplay(displayId)
+                if (display != null) {
+                    val metrics = android.util.DisplayMetrics()
+                    display.getRealMetrics(metrics)
+                    val width = metrics.widthPixels
+                    val height = metrics.heightPixels
+                    val density = metrics.densityDpi
+
+                    val json = org.json.JSONObject().apply {
+                        put("event", "DISPLAY_METRICS_CHANGED")
+                        put("width", width)
+                        put("height", height)
+                        put("density", density)
+                    }.toString()
+
+                    runOnUiThread {
+                        for (tab in tabsList) {
+                            tab.webView.evaluateJavascript("if (window.handleDisplayMetricsChanged) { window.handleDisplayMetricsChanged($json); }", null)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error handling display metrics changed", e)
+            }
         }
     }
+
+    private var pointerSpeedMultiplier = 1.0f
+    private var naturalScroll = true
 
     private var isRemoteSharingActive = false
     private var lastRemoteActivityTime = 0L
@@ -2504,6 +2532,94 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    fun getAccessPin(): String = accessPin
+
+    fun setUiScaleFromWeb(scale: Float) {
+        runOnUiThread {
+            currentScale = scale
+            applyUiScale()
+            presentation?.updatePresentationScale(scale)
+        }
+    }
+
+    fun setCursorStyleFromWeb(color: String, size: String) {
+        updateCursorStyle(color, size)
+    }
+
+    fun setPointerSpeedFromWeb(speed: Float) {
+        pointerSpeedMultiplier = speed
+    }
+
+    fun setScrollDirectionNaturalFromWeb(natural: Boolean) {
+        naturalScroll = natural
+    }
+
+    fun setOverscanPaddingFromWeb(padding: Int) {
+        runOnUiThread {
+            webViewContainer.setPadding(
+                dpToPx(padding),
+                dpToPx(padding),
+                dpToPx(padding),
+                dpToPx(padding)
+            )
+        }
+    }
+
+    fun stopRemoteControlSessionFromWeb() {
+        runOnUiThread {
+            stopRemoteSharing()
+        }
+    }
+
+    private fun updateCursorStyle(colorName: String, sizeName: String) {
+        runOnUiThread {
+            val cursorColor = when (colorName.lowercase(java.util.Locale.US)) {
+                "black" -> Color.BLACK
+                "yellow" -> Color.YELLOW
+                else -> Color.WHITE
+            }
+            val strokeColor = if (cursorColor == Color.BLACK) Color.WHITE else Color.BLACK
+
+            val multiplier = when (sizeName.lowercase(java.util.Locale.US)) {
+                "large" -> 1.5f
+                "extra large" -> 2.0f
+                else -> 1.0f
+            }
+
+            val w = (16 * multiplier).toInt().coerceAtLeast(1)
+            val h = (24 * multiplier).toInt().coerceAtLeast(1)
+            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bmp)
+            
+            val paint = Paint().apply {
+                color = cursorColor
+                style = Paint.Style.FILL
+                isAntiAlias = true
+            }
+            val strokePaint = Paint().apply {
+                color = strokeColor
+                style = Paint.Style.STROKE
+                strokeWidth = 2f * multiplier
+                isAntiAlias = true
+            }
+            val path = Path().apply {
+                moveTo(0f, 0f)
+                lineTo(16f * multiplier, 16f * multiplier)
+                lineTo(9f * multiplier, 16f * multiplier)
+                lineTo(14f * multiplier, 24f * multiplier)
+                lineTo(11f * multiplier, 24f * multiplier)
+                lineTo(6f * multiplier, 16f * multiplier)
+                lineTo(0f * multiplier, 20f * multiplier)
+                close()
+            }
+            canvas.drawPath(path, paint)
+            canvas.drawPath(path, strokePaint)
+
+            cursorView.setImageBitmap(bmp)
+            presentation?.updateCursorStyle(colorName, sizeName)
+        }
+    }
+
     private fun dpToPx(dp: Int): Int {
         val density = resources.displayMetrics.density
         return (dp * density).toInt()
@@ -2567,8 +2683,8 @@ class MainActivity : AppCompatActivity() {
                     if (event.pointerCount == 1) {
                         val pointerIndex = event.findPointerIndex(activePointerId)
                         if (pointerIndex != -1) {
-                            val dx = event.getX(pointerIndex) - lastX
-                            val dy = event.getY(pointerIndex) - lastY
+                            val dx = (event.getX(pointerIndex) - lastX) * pointerSpeedMultiplier
+                            val dy = (event.getY(pointerIndex) - lastY) * pointerSpeedMultiplier
                             lastX = event.getX(pointerIndex)
                             lastY = event.getY(pointerIndex)
 
@@ -2583,7 +2699,8 @@ class MainActivity : AppCompatActivity() {
                         val dy = currentScrollY - lastScrollY
                         lastScrollY = currentScrollY
                         
-                        val scaledDy = dy * 1.5f
+                        val directionSign = if (naturalScroll) 1f else -1f
+                        val scaledDy = dy * 1.5f * directionSign
                         if (isCasting && presentation != null) {
                             presentation?.scrollPresentation(scaledDy)
                         } else {

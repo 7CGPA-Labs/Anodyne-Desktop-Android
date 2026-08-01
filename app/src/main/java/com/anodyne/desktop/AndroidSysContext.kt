@@ -124,6 +124,59 @@ class AndroidSysContext(
         setMenusCallback(appName, menusJson)
     }
 
+    // --- Settings PWA JavascriptInterface Binders ---
+    @JavascriptInterface
+    fun getZramDiskSize(): String = "2.0 GB"
+
+    @JavascriptInterface
+    fun getZramAlgorithm(): String = "zstd"
+
+    @JavascriptInterface
+    fun getSystemSwappiness(): String = "60"
+
+    @JavascriptInterface
+    fun getStorageStatus(): String = getStorageInfo()
+
+    @JavascriptInterface
+    fun executeSystemCommand(action: String) {
+        Log.i(TAG, "Settings: Executed system command action: $action")
+    }
+
+    @JavascriptInterface
+    fun getAccessPin(): String {
+        return (context as? MainActivity)?.getAccessPin() ?: "000000"
+    }
+
+    @JavascriptInterface
+    fun setUiScale(scale: Float) {
+        (context as? MainActivity)?.setUiScaleFromWeb(scale)
+    }
+
+    @JavascriptInterface
+    fun setCursorStyle(color: String, size: String) {
+        (context as? MainActivity)?.setCursorStyleFromWeb(color, size)
+    }
+
+    @JavascriptInterface
+    fun setPointerSpeed(speed: Float) {
+        (context as? MainActivity)?.setPointerSpeedFromWeb(speed)
+    }
+
+    @JavascriptInterface
+    fun setScrollDirectionNatural(natural: Boolean) {
+        (context as? MainActivity)?.setScrollDirectionNaturalFromWeb(natural)
+    }
+
+    @JavascriptInterface
+    fun setOverscanPadding(padding: Int) {
+        (context as? MainActivity)?.setOverscanPaddingFromWeb(padding)
+    }
+
+    @JavascriptInterface
+    fun stopRemoteControlSession() {
+        (context as? MainActivity)?.stopRemoteControlSessionFromWeb()
+    }
+
     companion object {
         private const val TAG = "AndroidSysContext"
     }

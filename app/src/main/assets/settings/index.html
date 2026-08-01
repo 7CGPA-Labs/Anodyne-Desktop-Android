@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings | Unified Control</title>
+    <title>Settings | Anodyne OS</title>
     <link rel="stylesheet" href="style.css">
-    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
     <script src="script.js"></script>
 </head>
 <body>
@@ -16,33 +15,29 @@
                 <span class="header-title">Settings</span>
             </div>
             <ul class="category-list">
-                <li id="cat-network" class="active" onclick="switchCategory('network')">
-                    <span class="icon">📶</span>
-                    <span class="label">Network</span>
+                <li id="cat-display" class="active" onclick="switchCategory('display')">
+                    <span class="icon">📺</span>
+                    <span class="label">Display & Cast</span>
                 </li>
-                <li id="cat-wifi" onclick="switchCategory('wifi')">
-                    <span class="icon">🌐</span>
-                    <span class="label">Wi-Fi</span>
+                <li id="cat-legibility" onclick="switchCategory('legibility')">
+                    <span class="icon">♿</span>
+                    <span class="label">Legibility & Text</span>
                 </li>
-                <li id="cat-bluetooth" onclick="switchCategory('bluetooth')">
-                    <span class="icon">🔹</span>
-                    <span class="label">Bluetooth</span>
+                <li id="cat-input" onclick="switchCategory('input')">
+                    <span class="icon">🖱️</span>
+                    <span class="label">Mouse & Keyboard</span>
                 </li>
-                <li id="cat-display" onclick="switchCategory('display')">
-                    <span class="icon">🖥️</span>
-                    <span class="label">Display & Sound</span>
-                </li>
-                <li id="cat-security" onclick="switchCategory('security')">
+                <li id="cat-remote" onclick="switchCategory('remote')">
                     <span class="icon">🛡️</span>
-                    <span class="label">Security & Privacy</span>
+                    <span class="label">Remote Help</span>
                 </li>
-                <li id="cat-telemetry" onclick="switchCategory('telemetry')">
-                    <span class="icon">📊</span>
-                    <span class="label">System Telemetry</span>
+                <li id="cat-storage" onclick="switchCategory('storage')">
+                    <span class="icon">💾</span>
+                    <span class="label">Storage & Drafts</span>
                 </li>
-                <li id="cat-about" onclick="switchCategory('about')">
-                    <span class="icon">ℹ️</span>
-                    <span class="label">About</span>
+                <li id="cat-web-apps" onclick="switchCategory('web-apps')">
+                    <span class="icon">🌐</span>
+                    <span class="label">Default Web Apps</span>
                 </li>
             </ul>
         </aside>
@@ -50,305 +45,353 @@
         <!-- Gnome Right Content Pane -->
         <main class="settings-main">
             <header class="settings-header">
-                <h1 id="category-title">Network</h1>
+                <h1 id="category-title">Display & Cast</h1>
             </header>
 
             <div class="settings-content">
-                <!-- Section 1: Mobile Network -->
-                <section id="sec-network" class="settings-section">
-                    <div class="pref-group-title">Mobile Data</div>
+                <!-- Section 1: Display & Cast -->
+                <section id="sec-display" class="settings-section">
+                    <div class="pref-group-title">Wireless Screen Casting</div>
                     <div class="pref-group">
                         <div class="pref-row">
                             <div class="pref-text">
-                                <span class="pref-title">Mobile 4G Data</span>
-                                <span class="pref-subtitle">Connect to cellular data networks</span>
+                                <span class="pref-title">Wireless Display (Miracast)</span>
+                                <span class="pref-subtitle">Cast desktop wirelessly to smart TVs or projector</span>
                             </div>
                             <div class="pref-control">
-                                <label class="switch">
-                                    <input type="checkbox" id="mobile-data-toggle" checked>
-                                    <span class="slider"></span>
-                                </label>
+                                <button class="btn btn-secondary" onclick="scanWifiDisplays()">Scan Displays</button>
                             </div>
                         </div>
+                        <div class="pref-row" id="display-list-row" style="display:none; flex-direction:column; align-items:stretch; gap:10px;">
+                            <div style="font-size: 0.8rem; color:#8a8a93; margin-bottom:4px;">Available Smart Screens:</div>
+                            <div class="pref-row" style="padding: 8px 0; border-bottom: none;">
+                                <span>📺 Living Room TV</span>
+                                <button class="btn btn-primary" style="padding: 4px 10px;" onclick="connectWifiDisplay('Living Room TV')">Connect</button>
+                            </div>
+                            <div class="pref-row" style="padding: 8px 0; border-bottom: none;">
+                                <span>🖥️ Conference Projector</span>
+                                <button class="btn btn-primary" style="padding: 4px 10px;" onclick="connectWifiDisplay('Conference Projector')">Connect</button>
+                            </div>
+                        </div>
+                    </div>
 
+                    <div class="pref-group-title">Screen Fitting</div>
+                    <div class="pref-group">
                         <div class="pref-row">
                             <div class="pref-text">
-                                <span class="pref-title">Preferred Network Type</span>
-                                <span class="pref-subtitle">Select network generation preference</span>
+                                <span class="pref-title">Fix Cut-Off Edges (Overscan)</span>
+                                <span class="pref-subtitle">Calibrate border margins to fit TV boundaries</span>
                             </div>
                             <div class="pref-control">
-                                <select id="network-type-select" class="dropdown">
-                                    <option value="lte">4G LTE (Recommended)</option>
-                                    <option value="3g">3G Only</option>
-                                    <option value="2g">2G Only</option>
+                                <input type="range" id="overscan-slider" min="0" max="40" value="0" class="range-slider" oninput="changeOverscan(this.value)">
+                                <span id="overscan-val" class="slider-badge">0px</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pref-group-title">Display Settings</div>
+                    <div class="pref-group">
+                        <div class="pref-row">
+                            <div class="pref-text">
+                                <span class="pref-title">Display Mode Switcher</span>
+                                <span class="pref-subtitle">Render independent space on cast screen or mirror</span>
+                            </div>
+                            <div class="pref-control">
+                                <select id="display-mode-select" class="dropdown" onchange="changeDisplayMode(this.value)">
+                                    <option value="desktop">Desktop Mode (Independent 2nd screen)</option>
+                                    <option value="mirror">Mirror Phone Screen</option>
                                 </select>
                             </div>
                         </div>
                     </div>
 
-                    <div class="pref-group-title">Access Point Name (APN)</div>
+                    <div class="pref-group-title">Personalization</div>
                     <div class="pref-group">
-                        <div class="apn-form">
-                            <div class="form-group">
-                                <label for="apn-name">APN Name</label>
-                                <input type="text" id="apn-name" value="Anodyne Cellular Internet" class="text-input">
+                        <div class="pref-row">
+                            <div class="pref-text">
+                                <span class="pref-title">Wallpaper Selection</span>
+                                <span class="pref-subtitle">Choose system desktop wallpaper</span>
                             </div>
-                            <div class="form-group">
-                                <label for="apn-address">APN Address</label>
-                                <input type="text" id="apn-address" value="internet.anodyne.apn" class="text-input">
+                            <div class="pref-control">
+                                <select id="wallpaper-select" class="dropdown" onchange="changeWallpaper(this.value)">
+                                    <option value="dark">Aurora Dark (Default)</option>
+                                    <option value="light">Classic Light</option>
+                                    <option value="contrast">High-Contrast Slate</option>
+                                </select>
                             </div>
-                            <button class="btn btn-primary" onclick="saveAPN()">Save APN Profile</button>
                         </div>
                     </div>
                 </section>
 
-                <!-- Section 2: Wi-Fi -->
-                <section id="sec-wifi" class="settings-section hidden">
-                    <div class="pref-group-title">Wi-Fi Connection</div>
+                <!-- Section 2: Legibility & Text -->
+                <section id="sec-legibility" class="settings-section hidden">
+                    <div class="pref-group-title">OS Size & Zoom</div>
                     <div class="pref-group">
                         <div class="pref-row">
                             <div class="pref-text">
-                                <span class="pref-title">Wi-Fi Enable</span>
-                                <span class="pref-subtitle">Toggle wireless networking search</span>
+                                <span class="pref-title">Desktop Sizing</span>
+                                <span class="pref-subtitle">Scale text sizes and panels globally</span>
+                            </div>
+                            <div class="pref-control">
+                                <select id="scale-select" class="dropdown" onchange="changeScale(this.value)">
+                                    <option value="1.0">Small (100%)</option>
+                                    <option value="1.25">Medium (125%)</option>
+                                    <option value="1.5">Large (150%)</option>
+                                    <option value="2.0">Extra Large (200%)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pref-group-title">Visual Enhancements</div>
+                    <div class="pref-group">
+                        <div class="pref-row">
+                            <div class="pref-text">
+                                <span class="pref-title">High Contrast Mode</span>
+                                <span class="pref-subtitle">Bold border boundaries for low-vision reading</span>
                             </div>
                             <div class="pref-control">
                                 <label class="switch">
-                                    <input type="checkbox" id="wifi-toggle" checked>
+                                    <input type="checkbox" id="high-contrast-toggle" onchange="toggleHighContrast(this.checked)">
                                     <span class="slider"></span>
                                 </label>
                             </div>
                         </div>
                     </div>
 
-                    <div class="pref-group-title">Visible Networks</div>
+                    <div class="pref-group-title">Mouse Pointer Customization</div>
                     <div class="pref-group">
-                        <div class="pref-row" style="cursor: pointer;">
+                        <div class="pref-row">
                             <div class="pref-text">
-                                <span class="pref-title" id="active-wifi-name">Loading network...</span>
-                                <span class="pref-subtitle">Currently connected</span>
+                                <span class="pref-title">Cursor Visual Color</span>
+                                <span class="pref-subtitle">Pointer styling color preset</span>
                             </div>
                             <div class="pref-control">
-                                <span style="color: #3584e4; font-size: 0.95em;">Connected</span>
+                                <select id="cursor-color" class="dropdown" onchange="changeCursorStyle()">
+                                    <option value="white">White (Default)</option>
+                                    <option value="black">Black</option>
+                                    <option value="yellow">Yellow</option>
+                                </select>
                             </div>
                         </div>
-                        <div class="pref-row" style="cursor: pointer; opacity: 0.6;">
+                        <div class="pref-row">
                             <div class="pref-text">
-                                <span class="pref-title">Anodyne_Secure_5G</span>
-                                <span class="pref-subtitle">Secured (WPA3)</span>
+                                <span class="pref-title">Cursor Scaling Size</span>
+                                <span class="pref-subtitle">Scale mouse pointer pointer arrow width</span>
                             </div>
                             <div class="pref-control">
-                                <span style="font-size: 1.1em;">🔒</span>
+                                <select id="cursor-size" class="dropdown" onchange="changeCursorStyle()">
+                                    <option value="normal">Normal</option>
+                                    <option value="large">Large</option>
+                                    <option value="extra large">Extra Large</option>
+                                </select>
                             </div>
                         </div>
-                        <div class="pref-row" style="cursor: pointer; opacity: 0.6;">
+                    </div>
+
+                    <div class="pref-group-title">Speech Assistance</div>
+                    <div class="pref-group">
+                        <div class="pref-row">
                             <div class="pref-text">
-                                <span class="pref-title">Public_Transit_Free</span>
-                                <span class="pref-subtitle">Open Network</span>
+                                <span class="pref-title">Sound Alerts (Text-to-Speech)</span>
+                                <span class="pref-subtitle">Read active tab sessions aloud when switched</span>
                             </div>
                             <div class="pref-control">
-                                <span style="font-size: 1.1em;">🔓</span>
+                                <label class="switch">
+                                    <input type="checkbox" id="sound-alerts-toggle">
+                                    <span class="slider"></span>
+                                </label>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                <!-- Section 3: Bluetooth -->
-                <section id="sec-bluetooth" class="settings-section hidden">
-                    <div class="pref-group-title">Bluetooth Settings</div>
+                <!-- Section 3: Mouse & Keyboard -->
+                <section id="sec-input" class="settings-section hidden">
+                    <div class="pref-group-title">Trackpad & Pointer</div>
                     <div class="pref-group">
                         <div class="pref-row">
                             <div class="pref-text">
-                                <span class="pref-title">Bluetooth Enable</span>
-                                <span class="pref-subtitle">Toggle BlueZ bluetooth stack controller</span>
+                                <span class="pref-title">Mouse Pointer Speed</span>
+                                <span class="pref-subtitle">Pointer velocity delta sensitivity</span>
+                            </div>
+                            <div class="pref-control">
+                                <input type="range" id="pointer-speed-slider" min="5" max="25" value="10" class="range-slider" oninput="changePointerSpeed(this.value)">
+                                <span id="pointer-speed-val" class="slider-badge">1.0x</span>
+                            </div>
+                        </div>
+                        <div class="pref-row">
+                            <div class="pref-text">
+                                <span class="pref-title">Scroll Direction</span>
+                                <span class="pref-subtitle">Natural (content moves with finger) vs Standard</span>
                             </div>
                             <div class="pref-control">
                                 <label class="switch">
-                                    <input type="checkbox" id="bluetooth-toggle">
+                                    <input type="checkbox" id="scroll-direction-toggle" checked onchange="changeScrollDirection(this.checked)">
                                     <span class="slider"></span>
                                 </label>
                             </div>
                         </div>
                     </div>
 
-                    <div class="pref-group-title">Paired Devices</div>
+                    <div class="pref-group-title">System Shortcuts</div>
                     <div class="pref-group">
-                        <div class="pref-row" style="opacity: 0.5;">
+                        <div class="pref-row">
                             <div class="pref-text">
-                                <span class="pref-title">No paired accessories</span>
-                                <span class="pref-subtitle">Pair keyboard, mouse, or audio controllers</span>
+                                <span class="pref-title">Spotlight Shortcut Trigger</span>
+                                <span class="pref-subtitle">Define keystroke pattern to toggle Intent Launcher</span>
+                            </div>
+                            <div class="pref-control">
+                                <select id="spotlight-shortcut-select" class="dropdown">
+                                    <option value="meta_space">Cmd/Ctrl + Space (Default)</option>
+                                    <option value="alt_space">Alt + Space</option>
+                                    <option value="meta_only">Win / Command key alone</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pref-group-title">Typing Options</div>
+                    <div class="pref-group">
+                        <div class="pref-row">
+                            <div class="pref-text">
+                                <span class="pref-title">On-Screen Keyboard</span>
+                                <span class="pref-subtitle">Auto-show virtual keyboard when focusing text edits</span>
+                            </div>
+                            <div class="pref-control">
+                                <label class="switch">
+                                    <input type="checkbox" id="keyboard-auto-toggle" checked>
+                                    <span class="slider"></span>
+                                </label>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                <!-- Section 4: Display & Sound -->
-                <section id="sec-display" class="settings-section hidden">
-                    <div class="pref-group-title">Display Settings</div>
+                <!-- Section 4: Remote Help -->
+                <section id="sec-remote" class="settings-section hidden">
+                    <div class="pref-group-title">IT Screen Sharing</div>
                     <div class="pref-group">
                         <div class="pref-row">
                             <div class="pref-text">
-                                <span class="pref-title">Screen Brightness</span>
-                                <span class="pref-subtitle">Direct backlight controller level</span>
+                                <span class="pref-title">Get Remote Assistance</span>
+                                <span class="pref-subtitle">Get secure help by sharing screen via 6-digit PIN</span>
                             </div>
                             <div class="pref-control">
-                                <input type="range" id="brightness-slider" min="10" max="100" value="80" class="range-slider" oninput="changeBrightness(this.value)">
-                                <span id="brightness-val" class="slider-badge">80%</span>
+                                <button class="btn btn-secondary" onclick="triggerHelpPin()">Get Code</button>
+                            </div>
+                        </div>
+                        <div class="pref-row" id="remote-pin-row" style="display:none; background:rgba(220,38,38,0.1); border-color: rgba(220,38,38,0.2);">
+                            <div class="pref-text">
+                                <span class="pref-title" style="color:#ef4444;">Active Remote Session PIN</span>
+                                <span class="pref-subtitle" id="remote-pin-val" style="font-size:1.5rem; font-weight:bold; color:white; margin-top:8px;">000 000</span>
                             </div>
                         </div>
                     </div>
 
-                    <div class="pref-group-title">Audio Levels</div>
+                    <div class="pref-group-title">Unattended Remote Access</div>
                     <div class="pref-group">
                         <div class="pref-row">
                             <div class="pref-text">
-                                <span class="pref-title">System Audio Volume</span>
-                                <span class="pref-subtitle">ALSA mixer master output level</span>
+                                <span class="pref-title">Enable Unattended Access</span>
+                                <span class="pref-subtitle">Remote into this DeX desktop securely from home</span>
                             </div>
                             <div class="pref-control">
-                                <input type="range" id="volume-slider" min="0" max="100" value="70" class="range-slider" oninput="changeVolume(this.value)">
-                                <span id="volume-val" class="slider-badge">70%</span>
+                                <label class="switch">
+                                    <input type="checkbox" id="unattended-toggle" onchange="toggleUnattended(this.checked)">
+                                    <span class="slider"></span>
+                                </label>
                             </div>
                         </div>
-                    </div>
-                </section>
-
-                <!-- Section 5: Security & Privacy -->
-                <section id="sec-security" class="settings-section hidden">
-                    <div class="pref-group-title">Cryptography & Boot Protection</div>
-                    <div class="pref-group">
-                        <div class="pref-row">
-                            <div class="pref-text">
-                                <span class="pref-title">dm-verity Verification</span>
-                                <span class="pref-subtitle">Cryptographic read-only root system integrity</span>
-                            </div>
-                            <div class="pref-control">
-                                <span class="badge success">VERIFIED</span>
-                            </div>
-                        </div>
-
-                        <div class="pref-row">
-                            <div class="pref-text">
-                                <span class="pref-title">TPM LUKS Partition</span>
-                                <span class="pref-subtitle">Encrypted hardware partition storage status</span>
-                            </div>
-                            <div class="pref-control">
-                                <span class="badge success">ACTIVE / DECRYPTED</span>
-                            </div>
-                        </div>
-
-                        <div class="pref-row">
-                            <div class="pref-text">
-                                <span class="pref-title">Host Linux Kernel</span>
-                                <span class="pref-subtitle">Operating system kernel core signature</span>
-                            </div>
-                            <div class="pref-control">
-                                <span class="badge info">6.1.0-47-amd64</span>
+                        <div class="pref-row" id="unattended-pass-row" style="display:none; flex-direction:column; align-items:stretch; gap:10px;">
+                            <div class="form-group">
+                                <label for="unattended-password">Security Password</label>
+                                <input type="password" id="unattended-password" placeholder="Enter secure password" class="text-input">
                             </div>
                         </div>
                     </div>
 
-                    <div class="pref-group-title">Powerwash System Recovery</div>
+                    <div class="pref-group-title">Active Connections</div>
                     <div class="pref-group">
                         <div class="pref-row">
                             <div class="pref-text">
-                                <span class="pref-title">Reboot System</span>
-                                <span class="pref-subtitle">Performs standard ACPI warm system reset</span>
+                                <span class="pref-title">Active Support Session</span>
+                                <span class="pref-subtitle" id="connection-status-label">No active connections</span>
                             </div>
                             <div class="pref-control">
-                                <button class="btn btn-secondary" onclick="triggerPowerAction('reboot')">Reboot</button>
-                            </div>
-                        </div>
-
-                        <div class="pref-row">
-                            <div class="pref-text">
-                                <span class="pref-title">Powerwash Reset</span>
-                                <span class="pref-subtitle">Securely wipes writable LUKS storage to factory defaults</span>
-                            </div>
-                            <div class="pref-control">
-                                <button class="btn btn-danger" onclick="triggerPowerAction('powerwash')">Powerwash</button>
+                                <button class="btn btn-danger" id="disconnect-remote-btn" style="display:none;" onclick="disconnectRemoteSession()">Disconnect Session</button>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                <!-- Section 6: System Telemetry -->
-                <section id="sec-telemetry" class="settings-section hidden">
-                    <div class="pref-group-title">RAM & CPU Telemetry</div>
+                <!-- Section 5: Storage & Drafts -->
+                <section id="sec-storage" class="settings-section hidden">
+                    <div class="pref-group-title">Draft Security</div>
                     <div class="pref-group">
                         <div class="pref-row">
                             <div class="pref-text">
-                                <span class="pref-title">zRAM Partition Status</span>
-                                <span class="pref-subtitle">Size: <span id="zram-size-val">--</span> | Algo: <span id="zram-algo-val">--</span> | Swappiness: <span id="swappiness-val">--</span></span>
+                                <span class="pref-title">Auto-Save Protection</span>
+                                <span class="pref-subtitle">Automatically backup text drafts and page forms to SQLite-WASM every 5 seconds</span>
                             </div>
                             <div class="pref-control">
-                                <span class="badge info">zRAM SWAP</span>
-                            </div>
-                        </div>
-
-                        <div class="pref-row">
-                            <div class="pref-text">
-                                <span class="pref-title">CPU Processing Load</span>
-                                <span class="pref-subtitle">Live kernel CPU tick utilization status</span>
-                            </div>
-                            <div class="pref-control">
-                                <span id="cpu-load" class="badge info">--</span>
-                            </div>
-                        </div>
-
-                        <div class="pref-row">
-                            <div class="pref-text">
-                                <span class="pref-title">Cellular Signal Strength</span>
-                                <span class="pref-subtitle">oFono dbm signal telemetry mapping</span>
-                            </div>
-                            <div class="pref-control">
-                                <span id="ofono-signal" class="badge info">-82 dBm (Good)</span>
+                                <label class="switch">
+                                    <input type="checkbox" id="autosave-toggle" checked>
+                                    <span class="slider"></span>
+                                </label>
                             </div>
                         </div>
                     </div>
 
-                    <div class="pref-group-title">oFono Cellular Telemetry Stream</div>
+                    <div class="pref-group-title">Tab Resource Management</div>
                     <div class="pref-group">
-                        <div id="telemetry-logs" class="telemetry-logs-box">
-                            <!-- Populated dynamically via JS -->
+                        <div class="pref-row">
+                            <div class="pref-text">
+                                <span class="pref-title">Tab Memory Saver Mode</span>
+                                <span class="pref-subtitle">Balance RAM footprint vs tab load speeds</span>
+                            </div>
+                            <div class="pref-control">
+                                <select id="memory-saver-select" class="dropdown">
+                                    <option value="balanced">Balanced (Suspend background tabs after 15 mins)</option>
+                                    <option value="performance">Performance (Keep all tabs loaded in RAM)</option>
+                                    <option value="saver">Aggressive Saver (Serialize background tabs immediately)</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </section>
 
-                <!-- Section 7: About Panel -->
-                <section id="sec-about" class="settings-section hidden">
-                    <div class="about-hero">
-                        <div class="about-logo">⬡</div>
-                        <h2 class="about-system-name">Anodyne OS</h2>
-                        <span class="about-system-version">Version 2.0 (Build 2026.08.01)</span>
-                    </div>
-
-                    <div class="pref-group-title">System Specifications</div>
+                <!-- Section 6: Default Web Apps -->
+                <section id="sec-web-apps" class="settings-section hidden">
+                    <div class="pref-group-title">Protocol Mappings</div>
                     <div class="pref-group">
                         <div class="pref-row">
                             <div class="pref-text">
-                                <span class="pref-title">Storage Disk Status</span>
-                                <span class="pref-subtitle">Encrypted root filesystems storage capacity</span>
+                                <span class="pref-title">Default Email Service (mailto)</span>
+                                <span class="pref-subtitle">Direct mail links mapping choice</span>
                             </div>
                             <div class="pref-control">
-                                <span id="storage-status-val" style="color: #a0a0a0; font-size: 0.85em; font-weight: 500;">Reading...</span>
+                                <select id="email-default-select" class="dropdown">
+                                    <option value="gmail">Web Gmail (Recommended)</option>
+                                    <option value="outlook">Outlook PWA</option>
+                                    <option value="custom">Custom Webmail Server</option>
+                                </select>
                             </div>
                         </div>
+                    </div>
+
+                    <div class="pref-group-title">File Type Handlers</div>
+                    <div class="pref-group">
                         <div class="pref-row">
                             <div class="pref-text">
-                                <span class="pref-title">Processor Hardware</span>
-                                <span class="pref-subtitle">CPU Architecture details</span>
+                                <span class="pref-title">PDF Document Reader</span>
+                                <span class="pref-subtitle">Default PDF contract and document reader engine</span>
                             </div>
                             <div class="pref-control">
-                                <span style="color: #a0a0a0; font-size: 0.85em; font-weight: 500;">ARMv8 Cryptographic Core</span>
-                            </div>
-                        </div>
-                        <div class="pref-row">
-                            <div class="pref-text">
-                                <span class="pref-title">Virtualization Engine</span>
-                                <span class="pref-subtitle">Container subsystem platform</span>
-                            </div>
-                            <div class="pref-control">
-                                <span style="color: #a0a0a0; font-size: 0.85em; font-weight: 500;">LXC Sandboxed Linux</span>
+                                <select id="pdf-default-select" class="dropdown">
+                                    <option value="wasm">WASM PDFium Viewer (On-Device)</option>
+                                    <option value="external">External Browser Tab</option>
+                                </select>
                             </div>
                         </div>
                     </div>

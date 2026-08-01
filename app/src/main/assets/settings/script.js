@@ -1,216 +1,25 @@
 document.addEventListener("DOMContentLoaded", function() {
     initializeAnodyneIPCBridge();
     setupSettingListeners();
-    startSimulatedModemTelemetry();
-    startSystemMetricsSimulation();
-    switchCategory('network');
+    switchCategory('display');
 });
 
-// 1. QWebChannel Host Synchronization
 function initializeAnodyneIPCBridge() {
-    if (typeof qt !== 'undefined' && qt.webChannelTransport) {
-        new QWebChannel(qt.webChannelTransport, function(channel) {
-            window.sysContext = channel.objects.sysContext;
-            logSystemEvent("Bridge synchronized. Unified Control linked to host daemon.");
-            sysContext.logWebEvent("Settings PWA: Connection interface active.");
-            
-            sysContext.nativeJobProgressChanged.connect(function(jobId, progress) {
-                logSystemEvent(`Background worker active: Job [${jobId}] progress: ${progress}%`);
-            });
-            sysContext.nativeJobFinished.connect(function(jobId, success, message) {
-                logSystemEvent(`Background worker completed: Job [${jobId}] Success: ${success}. Info: ${message}`);
-            });
-            
-            loadZramMetricsFromHost();
-            loadHostSystemStats();
-        });
-    } else if (window.sysContext) {
-        logSystemEvent("Bridge synchronized. Connected to Android host container.");
-        sysContext.logWebEvent("Settings PWA: Connection interface active on Android.");
-        
-        window.onNativeJobProgressChanged = function(jobId, progress) {
-            logSystemEvent(`Background worker active: Job [${jobId}] progress: ${progress}%`);
-        };
-        window.onNativeJobFinished = function(jobId, success, message) {
-            logSystemEvent(`Background worker completed: Job [${jobId}] Success: ${success}. Info: ${message}`);
-        };
-        
-        loadZramMetricsFromHost();
+    if (window.sysContext) {
+        console.log("Bridge synchronized. Connected to Android host container.");
         loadHostSystemStats();
     } else {
-        logSystemEvent("Standalone Mode: QWebChannel and Android bridge not present. Running offline simulations.");
-    }
-}
-
-function loadZramMetricsFromHost() {
-    if (window.sysContext) {
-        try {
-            var size = sysContext.getZramDiskSize();
-            if (typeof size === 'function' || size === undefined) {
-                sysContext.getZramDiskSize(function(s) {
-                    document.getElementById("zram-size-val").textContent = s;
-                });
-                sysContext.getZramAlgorithm(function(a) {
-                    document.getElementById("zram-algo-val").textContent = a.trim();
-                });
-                sysContext.getSystemSwappiness(function(sw) {
-                    document.getElementById("swappiness-val").textContent = sw;
-                });
-            } else {
-                document.getElementById("zram-size-val").textContent = size;
-                document.getElementById("zram-algo-val").textContent = sysContext.getZramAlgorithm();
-                document.getElementById("swappiness-val").textContent = sysContext.getSystemSwappiness();
-            }
-        } catch (e) {
-            console.error("Failed to query zRAM metrics:", e);
-        }
+        console.log("Standalone Mode: Android host bridge not present. Running local simulated preferences.");
     }
 }
 
 function loadHostSystemStats() {
-    if (window.sysContext) {
-        try {
-            // Wi-Fi SSID connection query
-            if (typeof sysContext.getWifiSSID === 'function') {
-                var ssid = sysContext.getWifiSSID();
-                if (ssid) {
-                    document.getElementById("active-wifi-name").textContent = ssid;
-                }
-            }
-            // Storage Capacity query
-            if (typeof sysContext.getStorageStatus === 'function') {
-                var storage = sysContext.getStorageStatus();
-                if (storage) {
-                    document.getElementById("storage-status-val").textContent = storage;
-                }
-            }
-        } catch (e) {
-            console.error("Failed to query host system stats:", e);
-        }
+    if (window.sysContext && typeof window.sysContext.getAccessPin === 'function') {
+        const pin = window.sysContext.getAccessPin();
+        document.getElementById("remote-pin-val").textContent = pin;
     }
 }
 
-// 2. Setting Event Handlers
-function setupSettingListeners() {
-    const dataToggle = document.getElementById("mobile-data-toggle");
-    if (dataToggle) {
-        dataToggle.addEventListener("change", function() {
-            const state = dataToggle.checked ? "ENABLED" : "DISABLED";
-            logSystemEvent(`Mobile 4G Data set to ${state}`);
-            if (window.sysContext) {
-                sysContext.logWebEvent(`Settings: Changed Mobile Data State to ${state}`);
-            }
-        });
-    }
-
-    const netSelect = document.getElementById("network-type-select");
-    if (netSelect) {
-        netSelect.addEventListener("change", function() {
-            const mode = netSelect.value.toUpperCase();
-            logSystemEvent(`Preferred Network Type changed to: ${mode}`);
-            if (window.sysContext) {
-                sysContext.logWebEvent(`Settings: Network Type Preference set to ${mode}`);
-            }
-        });
-    }
-}
-
-// Slider controls
-function changeBrightness(val) {
-    document.getElementById("brightness-val").textContent = val + "%";
-    logSystemEvent(`Sysfs Brightness output -> /sys/class/backlight/brightness set to: ${val}%`);
-    if (window.sysContext) {
-        sysContext.logWebEvent(`Settings: sysfs backlight write -> ${val}%`);
-    }
-}
-
-function changeVolume(val) {
-    document.getElementById("volume-val").textContent = val + "%";
-    logSystemEvent(`ALSA Sound Mixer output -> Master volume set to: ${val}%`);
-    if (window.sysContext) {
-        sysContext.logWebEvent(`Settings: ALSA mixer volume -> ${val}%`);
-    }
-}
-
-function saveAPN() {
-    const name = document.getElementById("apn-name").value;
-    const address = document.getElementById("apn-address").value;
-    logSystemEvent(`APN Config Updated -> Name: "${name}", APN: "${address}"`);
-    if (window.sysContext) {
-        sysContext.logWebEvent(`Settings: Updated APN profile to Name:${name} / APN:${address}`);
-    }
-}
-
-// Power triggers
-function triggerPowerAction(action) {
-    const consent = confirm(`Are you sure you want to perform system action: [${action.toUpperCase()}]?`);
-    if (!consent) return;
-
-    logSystemEvent(`System Action Triggered: ${action.toUpperCase()}`);
-    if (window.sysContext) {
-        sysContext.logWebEvent(`Settings: Executing native power execution -> ${action}`);
-        sysContext.executeSystemCommand(action);
-    } else {
-        logSystemEvent(`[Simulation] Host system executing: ${action}`);
-    }
-}
-
-// Telemetry events
-function logSystemEvent(msg) {
-    const logsBox = document.getElementById("telemetry-logs");
-    if (!logsBox) return;
-    
-    const now = new Date();
-    const timestamp = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    
-    const entry = document.createElement("div");
-    entry.className = "log-entry";
-    entry.innerHTML = `[${timestamp}] ${msg}`;
-    logsBox.appendChild(entry);
-    
-    logsBox.scrollTop = logsBox.scrollHeight;
-}
-
-function startSimulatedModemTelemetry() {
-    const signalDisplay = document.getElementById("ofono-signal");
-    if (!signalDisplay) return;
-    
-    setInterval(function() {
-        const dbs = -70 - Math.floor(Math.random() * 15);
-        let quality = "Excellent";
-        if (dbs < -80) quality = "Good";
-        if (dbs < -83) quality = "Fair";
-        signalDisplay.textContent = `${dbs} dBm (${quality})`;
-    }, 8000);
-
-    const simulatedSMS = [
-        "SMS from +14155552671: 'System deployment status: OK'",
-        "SMS from Carrier: 'APN profile sync succeeded.'",
-        "SMS from +14155559092: 'Check out the new Anodyne workspace!'",
-        "SMS from System Watchdog: 'Memory compression zRAM zstd optimized.'"
-    ];
-
-    setInterval(function() {
-        const randomMsg = simulatedSMS[Math.floor(Math.random() * simulatedSMS.length)];
-        logSystemEvent(randomMsg);
-        if (window.sysContext) {
-            sysContext.logWebEvent(`Settings (oFono Simulation): ${randomMsg}`);
-        }
-    }, 25000);
-}
-
-// Fluctuates CPU values
-function startSystemMetricsSimulation() {
-    const cpuDisplay = document.getElementById("cpu-load");
-    if (!cpuDisplay) return;
-    
-    setInterval(function() {
-        const load = 5 + Math.floor(Math.random() * 20);
-        cpuDisplay.textContent = `${load}% Load`;
-    }, 4000);
-}
-
-// Category switcher
 function switchCategory(cat) {
     const sections = document.querySelectorAll(".settings-section");
     sections.forEach(sec => sec.classList.add("hidden"));
@@ -221,13 +30,12 @@ function switchCategory(cat) {
     }
 
     const titles = {
-        'network': 'Network',
-        'wifi': 'Wi-Fi',
-        'bluetooth': 'Bluetooth',
-        'display': 'Display & Sound',
-        'security': 'Security & Privacy',
-        'telemetry': 'System Telemetry',
-        'about': 'About'
+        'display': 'Display & Cast',
+        'legibility': 'Legibility & Text',
+        'input': 'Mouse & Keyboard',
+        'remote': 'Remote Help',
+        'storage': 'Storage & Drafts',
+        'web-apps': 'Default Web Apps'
     };
     document.getElementById("category-title").textContent = titles[cat] || 'Settings';
 
@@ -239,6 +47,113 @@ function switchCategory(cat) {
         activeLi.classList.add("active");
     }
 
-    // Refresh Wi-Fi and Storage telemetries when visiting relevant tabs
     loadHostSystemStats();
+}
+
+function setupSettingListeners() {
+    // Read cached values from localStorage
+    const cachedOverscan = localStorage.getItem("overscan") || 0;
+    const overscanSlider = document.getElementById("overscan-slider");
+    if (overscanSlider) {
+        overscanSlider.value = cachedOverscan;
+        document.getElementById("overscan-val").textContent = cachedOverscan + "px";
+    }
+
+    const cachedSpeed = localStorage.getItem("pointerSpeed") || 10;
+    const speedSlider = document.getElementById("pointer-speed-slider");
+    if (speedSlider) {
+        speedSlider.value = cachedSpeed;
+        document.getElementById("pointer-speed-val").textContent = (cachedSpeed / 10).toFixed(1) + "x";
+    }
+}
+
+// Wireless displays simulation triggers
+function scanWifiDisplays() {
+    const row = document.getElementById("display-list-row");
+    row.style.display = row.style.display === "none" ? "flex" : "none";
+}
+
+function connectWifiDisplay(name) {
+    alert(`Connecting wirelessly to: ${name}...`);
+}
+
+function changeOverscan(val) {
+    document.getElementById("overscan-val").textContent = val + "px";
+    localStorage.setItem("overscan", val);
+    if (window.sysContext && typeof window.sysContext.setOverscanPadding === 'function') {
+        window.sysContext.setOverscanPadding(parseInt(val, 10));
+    }
+}
+
+function changeDisplayMode(mode) {
+    if (window.sysContext && typeof window.sysContext.logWebEvent === 'function') {
+        window.sysContext.logWebEvent(`Settings: Changed display mode to ${mode}`);
+    }
+}
+
+function changeWallpaper(wallpaper) {
+    if (window.sysContext && typeof window.sysContext.logWebEvent === 'function') {
+        window.sysContext.logWebEvent(`Settings: Updated desktop wallpaper theme to ${wallpaper}`);
+    }
+}
+
+function changeScale(scaleStr) {
+    const scale = parseFloat(scaleStr);
+    if (window.sysContext && typeof window.sysContext.setUiScale === 'function') {
+        window.sysContext.setUiScale(scale);
+    }
+}
+
+function toggleHighContrast(checked) {
+    if (checked) {
+        document.body.classList.add("high-contrast");
+    } else {
+        document.body.classList.remove("high-contrast");
+    }
+    if (window.sysContext && typeof window.sysContext.logWebEvent === 'function') {
+        window.sysContext.logWebEvent(`Settings: Toggle high contrast mode to ${checked}`);
+    }
+}
+
+function changeCursorStyle() {
+    const color = document.getElementById("cursor-color").value;
+    const size = document.getElementById("cursor-size").value;
+    if (window.sysContext && typeof window.sysContext.setCursorStyle === 'function') {
+        window.sysContext.setCursorStyle(color, size);
+    }
+}
+
+function changePointerSpeed(val) {
+    const factor = (val / 10).toFixed(1);
+    document.getElementById("pointer-speed-val").textContent = factor + "x";
+    localStorage.setItem("pointerSpeed", val);
+    if (window.sysContext && typeof window.sysContext.setPointerSpeed === 'function') {
+        window.sysContext.setPointerSpeed(parseFloat(factor));
+    }
+}
+
+function changeScrollDirection(natural) {
+    if (window.sysContext && typeof window.sysContext.setScrollDirectionNatural === 'function') {
+        window.sysContext.setScrollDirectionNatural(natural);
+    }
+}
+
+function triggerHelpPin() {
+    const row = document.getElementById("remote-pin-row");
+    row.style.display = "flex";
+    loadHostSystemStats();
+}
+
+function toggleUnattended(checked) {
+    const row = document.getElementById("unattended-pass-row");
+    row.style.display = checked ? "flex" : "none";
+}
+
+function disconnectRemoteSession() {
+    if (window.sysContext && typeof window.sysContext.stopRemoteControlSession === 'function') {
+        window.sysContext.stopRemoteControlSession();
+    }
+    document.getElementById("remote-pin-row").style.display = "none";
+    document.getElementById("disconnect-remote-btn").style.display = "none";
+    document.getElementById("connection-status-label").textContent = "No active connections";
 }
