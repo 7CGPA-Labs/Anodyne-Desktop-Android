@@ -157,3 +157,11 @@ function disconnectRemoteSession() {
     document.getElementById("disconnect-remote-btn").style.display = "none";
     document.getElementById("connection-status-label").textContent = "No active connections";
 }
+
+function triggerCacheCleanup() {
+    if (window.sysContext && typeof window.sysContext.clearSystemStorage === 'function') {
+        window.sysContext.clearSystemStorage();
+    } else {
+        alert("Cleanup Simulated: System temporary databases and cache cleared successfully!");
+    }
+}

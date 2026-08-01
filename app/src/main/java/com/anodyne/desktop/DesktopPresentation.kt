@@ -1606,6 +1606,13 @@ class DesktopPresentation(
                                 document.head.appendChild(baselineStyle);
                             }
 
+                            // Inject print adapter bridge
+                            if (window.sysContext && typeof window.sysContext.printDocument === 'function') {
+                                window.print = function() {
+                                    window.sysContext.printDocument();
+                                };
+                            }
+
                             // Fail-Safe Tab form recovery script (Auto-save drafts & scroll positions)
                             (function() {
                                 var tabKey = "tab_draft_" + window.location.href;

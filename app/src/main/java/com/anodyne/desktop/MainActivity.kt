@@ -112,6 +112,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var logoText: TextView
     private lateinit var anodyneMenu: TextView
     private lateinit var leftContainer: LinearLayout
+    private lateinit var activeIndicatorsContainer: LinearLayout
+    private lateinit var downloadsTrayText: TextView
+
+    data class DownloadRecord(val filename: String, val file: java.io.File, val mimeType: String)
+    private val downloadRecords = mutableListOf<DownloadRecord>()
 
     private lateinit var wifiTextView: TextView
     private lateinit var batteryTextView: TextView
@@ -285,6 +290,17 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { showLxqtAppDrawer(this) }
         }
         leftContainer.addView(logoText)
+
+        // Active GPS/Camera/Mic indicator container
+        activeIndicatorsContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT).apply {
+                leftMargin = dpToPx(16)
+            }
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        leftContainer.addView(activeIndicatorsContainer)
+
         topBar.addView(leftContainer)
 
         // Center Container for Clock/Calendar/Notifications (GNOME style)
@@ -378,6 +394,15 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { toggleSpotlightSearch() }
         }
         rightContainer.addView(spotlightBtn)
+
+        downloadsTrayText = TextView(this).apply {
+            text = "📥"
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 8.5f
+            setPadding(dpToPx(4), 0, dpToPx(4), 0)
+            setOnClickListener { showDownloadsDropdown() }
+        }
+        rightContainer.addView(downloadsTrayText)
 
         wifiTextView = TextView(this).apply {
             text = "🛜"
@@ -1848,6 +1873,13 @@ class MainActivity : AppCompatActivity() {
                                 document.head.appendChild(baselineStyle);
                             }
 
+                            // Inject print adapter bridge
+                            if (window.sysContext && typeof window.sysContext.printDocument === 'function') {
+                                window.print = function() {
+                                    window.sysContext.printDocument();
+                                };
+                            }
+
                             // Fail-Safe Tab form recovery script (Auto-save drafts & scroll positions)
                             (function() {
                                 var tabKey = "tab_draft_" + window.location.href;
@@ -1914,6 +1946,56 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        newWebView.webChromeClient = object : android.webkit.WebChromeClient() {
+            override fun onGeolocationPermissionsShowPrompt(
+                origin: String?,
+                callback: android.webkit.GeolocationPermissions.Callback?
+            ) {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Location Access Request")
+                    .setMessage("This application ($url) wants to access your GPS Location. Allow GPS coordinates access?")
+                    .setPositiveButton("Allow") { _, _ ->
+                        callback?.invoke(origin, true, false)
+                        showActiveIndicator("📍 GPS Location Active")
+                    }
+                    .setNegativeButton("Block") { _, _ ->
+                        callback?.invoke(origin, false, false)
+                    }
+                    .setCancelable(false)
+                    .show()
+            }
+
+            override fun onPermissionRequest(request: android.webkit.PermissionRequest?) {
+                if (request == null) return
+                val resources = request.resources
+                val resourcesStr = resources.joinToString(", ") { res ->
+                    when (res) {
+                        android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE -> "Microphone"
+                        android.webkit.PermissionRequest.RESOURCE_VIDEO_CAPTURE -> "Camera"
+                        else -> res
+                    }
+                }
+                
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("App Permission Request")
+                    .setMessage("This application ($url) wants to access: $resourcesStr. Allow hardware access?")
+                    .setPositiveButton("Allow") { _, _ ->
+                        request.grant(resources)
+                        if (resources.contains(android.webkit.PermissionRequest.RESOURCE_VIDEO_CAPTURE)) {
+                            showActiveIndicator("🎥 Camera Active")
+                        }
+                        if (resources.contains(android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                            showActiveIndicator("🎙️ Microphone Active")
+                        }
+                    }
+                    .setNegativeButton("Block") { _, _ ->
+                        request.deny()
+                    }
+                    .setCancelable(false)
+                    .show()
+            }
+        }
+
         newWebView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -1924,8 +2006,59 @@ class MainActivity : AppCompatActivity() {
             loadWithOverviewMode = true
             useWideViewPort = true
             builtInZoomControls = false
-            displayZoomControls = false
             cacheMode = WebSettings.LOAD_DEFAULT
+        }
+
+        newWebView.setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
+            try {
+                var filename = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimetype)
+                if (filename.isNullOrEmpty()) {
+                    filename = "downloaded_file"
+                }
+                
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Downloading: $filename", Toast.LENGTH_SHORT).show()
+                }
+                
+                Thread {
+                    try {
+                        val connection = java.net.URL(url).openConnection()
+                        connection.setRequestProperty("User-Agent", userAgent)
+                        val inputStream = connection.getInputStream()
+                        
+                        val destFile = java.io.File(
+                            android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+                            filename
+                        )
+                        val outputStream = java.io.FileOutputStream(destFile)
+                        
+                        val buffer = ByteArray(4096)
+                        var bytesRead: Int
+                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                            outputStream.write(buffer, 0, bytesRead)
+                        }
+                        
+                        outputStream.close()
+                        inputStream.close()
+                        
+                        synchronized(downloadRecords) {
+                            downloadRecords.add(DownloadRecord(filename, destFile, mimetype))
+                        }
+                        
+                        runOnUiThread {
+                            downloadsTrayText.setTextColor(Color.parseColor("#3584e4")) // Highlight blue
+                            Toast.makeText(this@MainActivity, "Download finished: $filename", Toast.LENGTH_LONG).show()
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error downloading file from URL", e)
+                        runOnUiThread {
+                            Toast.makeText(this@MainActivity, "Download failed for $filename", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }.start()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error initiating download process", e)
+            }
         }
 
         val sysContext = AndroidSysContext(this,
@@ -2966,6 +3099,125 @@ class MainActivity : AppCompatActivity() {
 
             val newTab = TabItem(id, url, title, newWebView)
             tabsList.add(newTab)
+        }
+    }
+
+    fun printActiveTab() {
+        runOnUiThread {
+            try {
+                val webView = getActiveWebView() ?: return@runOnUiThread
+                val printManager = getSystemService(Context.PRINT_SERVICE) as android.print.PrintManager
+                val jobName = "Anodyne Document"
+                val printAdapter = webView.createPrintDocumentAdapter(jobName)
+                printManager.print(
+                    jobName,
+                    printAdapter,
+                    android.print.PrintAttributes.Builder().build()
+                )
+                Log.i(TAG, "Sent active WebView content to PrintManager")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error printing document from active WebView", e)
+            }
+        }
+    }
+
+    fun showActiveIndicator(indicatorText: String) {
+        runOnUiThread {
+            // Check if this indicator is already showing
+            for (i in 0 until activeIndicatorsContainer.childCount) {
+                val child = activeIndicatorsContainer.getChildAt(i) as? TextView
+                if (child?.text?.toString() == indicatorText) return@runOnUiThread
+            }
+
+            val badge = TextView(this).apply {
+                text = indicatorText
+                setTextColor(Color.parseColor("#ef4444")) // high contrast red
+                textSize = 7.5f * currentScale
+                setPadding(dpToPx(6), dpToPx(1), dpToPx(6), dpToPx(1))
+                val bg = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.parseColor("#2a1818"))
+                    cornerRadius = dpToPx(4).toFloat()
+                    setStroke(1, Color.parseColor("#ef4444"))
+                }
+                background = bg
+                isClickable = true
+                isFocusable = true
+                
+                // Mute/Kill switch: clicking the badge clears it and reloads the active WebView to revoke hardware session!
+                setOnClickListener {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Mute / Stop Resource?")
+                        .setMessage("Would you like to stop this active resource and reload the page?")
+                        .setPositiveButton("Reload Page") { _, _ ->
+                            getActiveWebView()?.reload()
+                            activeIndicatorsContainer.removeView(this)
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+            }
+            activeIndicatorsContainer.addView(badge)
+        }
+    }
+
+    private fun showDownloadsDropdown() {
+        downloadsTrayText.setTextColor(Color.parseColor("#94a3b8"))
+        
+        val items = mutableListOf<MacMenuItem>()
+        if (downloadRecords.isEmpty()) {
+            items.add(MacMenuItem("No active or completed downloads"))
+        } else {
+            synchronized(downloadRecords) {
+                for (rec in downloadRecords) {
+                    items.add(MacMenuItem("📄 ${rec.filename}") {
+                        openDownloadedFile(rec)
+                    })
+                }
+            }
+        }
+        showMacMenu(downloadsTrayText, items)
+    }
+
+    private fun openDownloadedFile(rec: DownloadRecord) {
+        try {
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "com.anodyne.desktop.provider",
+                rec.file
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, rec.mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error opening downloaded file", e)
+            Toast.makeText(this, "Cannot open file natively: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun clearAllCachedWebData() {
+        runOnUiThread {
+            try {
+                android.webkit.WebStorage.getInstance().deleteAllData()
+                android.webkit.WebViewDatabase.getInstance(this).clearHttpAuthUsernamePassword()
+                
+                val cookieManager = android.webkit.CookieManager.getInstance()
+                cookieManager.removeAllCookies { success ->
+                    Log.i(TAG, "Removed all cookies: $success")
+                }
+                cookieManager.flush()
+                
+                for (tab in tabsList) {
+                    tab.webView.clearCache(true)
+                    tab.webView.reload()
+                }
+                
+                Toast.makeText(this, "System cache and storage cleaned successfully!", Toast.LENGTH_SHORT).show()
+                Log.i(TAG, "Successfully cleared all HTTP caching and cookies.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error clearing cached WebView data", e)
+            }
         }
     }
 

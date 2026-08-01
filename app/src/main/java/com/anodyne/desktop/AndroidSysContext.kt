@@ -182,6 +182,16 @@ class AndroidSysContext(
         return (context as? MainActivity)?.getGpsLocationFromNative() ?: "Locating..."
     }
 
+    @JavascriptInterface
+    fun printDocument() {
+        (context as? MainActivity)?.printActiveTab()
+    }
+
+    @JavascriptInterface
+    fun clearSystemStorage() {
+        (context as? MainActivity)?.clearAllCachedWebData()
+    }
+
     companion object {
         private const val TAG = "AndroidSysContext"
     }
