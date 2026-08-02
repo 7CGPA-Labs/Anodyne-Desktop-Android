@@ -118,6 +118,31 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    fun unregisterDynamicPwaFromWeb(id: String) {
+        runOnUiThread {
+            dynamicPwas.removeAll { it.id == id }
+            val prefs = getSharedPreferences("dynamic_registry", Context.MODE_PRIVATE)
+            val set = prefs.getStringSet("pwas", emptySet()) ?: emptySet()
+            val updated = set.filterNot { it.startsWith("$id|") }.toSet()
+            prefs.edit().putStringSet("pwas", updated).apply()
+            refreshTopBarMenus()
+            Log.i("PwaRegistry", "Successfully unregistered dynamic PWA: $id")
+        }
+    }
+
+    fun unregisterDynamicExtensionFromWeb(name: String) {
+        runOnUiThread {
+            dynamicExtensions.removeAll { it.name == name }
+            val prefs = getSharedPreferences("dynamic_registry", Context.MODE_PRIVATE)
+            val set = prefs.getStringSet("extensions", emptySet()) ?: emptySet()
+            val updated = set.filterNot { it.startsWith("$name|") }.toSet()
+            prefs.edit().putStringSet("extensions", updated).apply()
+            refreshTopBarMenus()
+            Log.i("PwaRegistry", "Successfully unregistered dynamic Extension: $name")
+        }
+    }
+
+
     private fun loadDynamicRegistry() {
         val prefs = getSharedPreferences("dynamic_registry", Context.MODE_PRIVATE)
         val pwaSet = prefs.getStringSet("pwas", emptySet()) ?: emptySet()
@@ -1701,6 +1726,38 @@ class MainActivity : AppCompatActivity() {
                     setOnClickListener {
                         dismissActiveDropdown()
                         item.action?.invoke()
+                    }
+
+                    setOnLongClickListener {
+                        val pwa = dynamicPwas.find { it.title == item.title }
+                        val ext = dynamicExtensions.find { "🧩 " + it.name == item.title || it.name == item.title }
+                        if (pwa != null) {
+                            AlertDialog.Builder(this@MainActivity)
+                                .setTitle("Uninstall Application")
+                                .setMessage("Are you sure you want to uninstall ${pwa.title}?")
+                                .setPositiveButton("Uninstall") { _, _ ->
+                                    unregisterDynamicPwaFromWeb(pwa.id)
+                                    dismissActiveDropdown()
+                                    showToast("${pwa.title} uninstalled")
+                                }
+                                .setNegativeButton("Cancel", null)
+                                .show()
+                            true
+                        } else if (ext != null) {
+                            AlertDialog.Builder(this@MainActivity)
+                                .setTitle("Remove Extension")
+                                .setMessage("Are you sure you want to remove extension ${ext.name}?")
+                                .setPositiveButton("Remove") { _, _ ->
+                                    unregisterDynamicExtensionFromWeb(ext.name)
+                                    dismissActiveDropdown()
+                                    showToast("Extension ${ext.name} removed")
+                                }
+                                .setNegativeButton("Cancel", null)
+                                .show()
+                            true
+                        } else {
+                            false
+                        }
                     }
                 }
                 popupView.addView(row)

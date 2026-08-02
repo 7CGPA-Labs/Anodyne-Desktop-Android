@@ -70,6 +70,16 @@ class AndroidSysContext(
     }
 
     @JavascriptInterface
+    fun unregisterDynamicPwa(appId: String) {
+        (context as? MainActivity)?.unregisterDynamicPwaFromWeb(appId)
+    }
+
+    @JavascriptInterface
+    fun unregisterDynamicExtension(name: String) {
+        (context as? MainActivity)?.unregisterDynamicExtensionFromWeb(name)
+    }
+
+    @JavascriptInterface
     fun getStorageInfo(): String {
         return try {
             val path = context.filesDir
