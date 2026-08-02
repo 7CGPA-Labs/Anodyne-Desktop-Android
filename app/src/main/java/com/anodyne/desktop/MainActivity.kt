@@ -371,7 +371,7 @@ class MainActivity : AppCompatActivity() {
     // Tooltip & Top Bar UI elements
     private lateinit var tooltipView: TextView
     private lateinit var topBar: LinearLayout
-    private lateinit var logoText: TextView
+    private lateinit var logoText: ImageView
     private lateinit var anodyneMenu: TextView
     private lateinit var leftContainer: LinearLayout
     private lateinit var activeIndicatorsContainer: LinearLayout
@@ -424,12 +424,14 @@ class MainActivity : AppCompatActivity() {
             tabScroll.layoutParams.height = dpToPx((28 * currentScale).toInt())
             tabScroll.requestLayout()
 
+            logoText.layoutParams.width = dpToPx((14 * currentScale).toInt())
+            logoText.layoutParams.height = dpToPx((14 * currentScale).toInt())
+            logoText.requestLayout()
+
             for (i in 0 until leftContainer.childCount) {
-                (leftContainer.getChildAt(i) as? TextView)?.apply {
-                    textSize = 8.5f * currentScale
-                    if (this == logoText) {
-                        textSize = 11f * currentScale
-                    }
+                val child = leftContainer.getChildAt(i)
+                if (child is TextView && child != logoText) {
+                    child.textSize = 8.5f * currentScale
                 }
             }
 
@@ -673,7 +675,7 @@ class MainActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dpToPx(22)
             )
-            setBackgroundColor(Color.parseColor("#0c0c14"))
+            setBackgroundColor(Color.parseColor("#1e1e1e")) // macOS-style grey
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dpToPx(14), 0, dpToPx(14), 0)
         }
@@ -685,11 +687,10 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
         }
 
-        logoText = TextView(this).apply {
-            text = "⬡"
-            setTextColor(Color.parseColor("#f8fafc"))
-            textSize = 11f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        logoText = ImageView(this).apply {
+            setImageResource(dev.seven_cgpalabs.anodynedesktop.R.mipmap.ic_launcher)
+            layoutParams = LinearLayout.LayoutParams(dpToPx(14), dpToPx(14))
+            scaleType = ImageView.ScaleType.FIT_CENTER
             setOnClickListener { showLxqtAppDrawer(this) }
         }
         registerTooltipHover(logoText) { "App Menu" }
@@ -913,7 +914,7 @@ class MainActivity : AppCompatActivity() {
                 dpToPx(28)
             )
             isHorizontalScrollBarEnabled = false
-            setBackgroundColor(Color.parseColor("#0c0c14"))
+            setBackgroundColor(Color.parseColor("#202124")) // Chrome dark grey
         }
 
         tabContainer = LinearLayout(this).apply {
@@ -1023,7 +1024,7 @@ class MainActivity : AppCompatActivity() {
         // 7. Welcome Splash Screen Overlay
         val splashLayout = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
-            setBackgroundColor(Color.parseColor("#09090e"))
+            setBackgroundColor(Color.parseColor("#1e1e1e")) // macOS-style grey
             isClickable = true
             isFocusable = true
         }
@@ -1032,11 +1033,11 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
         }
-        val logoView = TextView(this).apply {
-            text = "⬡"
-            setTextColor(Color.WHITE)
-            textSize = 64f
-            gravity = Gravity.CENTER
+        val logoView = ImageView(this).apply {
+            setImageResource(dev.seven_cgpalabs.anodynedesktop.R.mipmap.ic_launcher)
+            layoutParams = LinearLayout.LayoutParams(dpToPx(72), dpToPx(72)).apply {
+                gravity = Gravity.CENTER
+            }
         }
         val titleView = TextView(this).apply {
             text = "Anodyne OS"

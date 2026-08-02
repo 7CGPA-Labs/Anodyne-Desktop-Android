@@ -84,7 +84,7 @@ class DesktopPresentation(
     // Tooltip & Top Bar UI elements
     private lateinit var tooltipView: TextView
     private lateinit var topBar: LinearLayout
-    private lateinit var logoText: TextView
+    private lateinit var logoText: ImageView
     private lateinit var anodyneMenu: TextView
     private lateinit var leftContainer: LinearLayout
 
@@ -172,12 +172,14 @@ class DesktopPresentation(
         tabScroll.layoutParams.height = dpToPx((28 * currentScale).toInt())
         tabScroll.requestLayout()
 
+        logoText.layoutParams.width = dpToPx((14 * currentScale).toInt())
+        logoText.layoutParams.height = dpToPx((14 * currentScale).toInt())
+        logoText.requestLayout()
+
         for (i in 0 until leftContainer.childCount) {
-            (leftContainer.getChildAt(i) as? TextView)?.apply {
-                textSize = 8.5f * currentScale
-                if (this == logoText) {
-                    textSize = 11f * currentScale
-                }
+            val child = leftContainer.getChildAt(i)
+            if (child is TextView && child != logoText) {
+                child.textSize = 8.5f * currentScale
             }
         }
 
@@ -233,7 +235,7 @@ class DesktopPresentation(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dpToPx(22)
             )
-            setBackgroundColor(Color.parseColor("#0c0c14"))
+            setBackgroundColor(Color.parseColor("#1e1e1e")) // macOS-style grey
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dpToPx(14), 0, dpToPx(14), 0)
         }
@@ -245,11 +247,10 @@ class DesktopPresentation(
             gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
         }
 
-        logoText = TextView(context).apply {
-            text = "⬡"
-            setTextColor(Color.parseColor("#f8fafc"))
-            textSize = 11f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        logoText = ImageView(context).apply {
+            setImageResource(dev.seven_cgpalabs.anodynedesktop.R.mipmap.ic_launcher)
+            layoutParams = LinearLayout.LayoutParams(dpToPx(14), dpToPx(14))
+            scaleType = ImageView.ScaleType.FIT_CENTER
             setOnClickListener { showLxqtAppDrawer(this) }
         }
         registerTooltipHover(logoText) { "App Menu" }
@@ -381,7 +382,7 @@ class DesktopPresentation(
                 dpToPx(28)
             )
             isHorizontalScrollBarEnabled = false
-            setBackgroundColor(Color.parseColor("#0c0c14"))
+            setBackgroundColor(Color.parseColor("#202124")) // Chrome dark grey
         }
 
         tabContainer = LinearLayout(context).apply {
