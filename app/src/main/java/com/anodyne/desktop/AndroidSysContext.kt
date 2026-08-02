@@ -60,6 +60,16 @@ class AndroidSysContext(
     }
 
     @JavascriptInterface
+    fun registerDynamicPwa(appId: String, title: String, url: String, category: String) {
+        (context as? MainActivity)?.registerDynamicPwaFromWeb(appId, title, url, category)
+    }
+
+    @JavascriptInterface
+    fun registerDynamicExtension(name: String, script: String) {
+        (context as? MainActivity)?.registerDynamicExtensionFromWeb(name, script)
+    }
+
+    @JavascriptInterface
     fun getStorageInfo(): String {
         return try {
             val path = context.filesDir

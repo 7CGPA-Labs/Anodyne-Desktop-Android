@@ -76,6 +76,66 @@ class MainActivity : AppCompatActivity() {
     // Store custom PWA menus mapped by tabId
     private val tabMenusMap = mutableMapOf<String, AppMenuConfig>()
 
+    // Store dynamically registered PWAs & Extensions
+    data class DynamicPwa(val id: String, val title: String, val url: String, val category: String)
+    data class DynamicExtension(val name: String, val script: String)
+
+    val dynamicPwas = mutableListOf<DynamicPwa>()
+    val dynamicExtensions = mutableListOf<DynamicExtension>()
+
+    fun registerDynamicPwaFromWeb(id: String, title: String, url: String, category: String) {
+        runOnUiThread {
+            if (dynamicPwas.none { it.id == id }) {
+                dynamicPwas.add(DynamicPwa(id, title, url, category))
+                val prefs = getSharedPreferences("dynamic_registry", Context.MODE_PRIVATE)
+                val set = prefs.getStringSet("pwas", mutableSetOf()) ?: mutableSetOf()
+                val updated = set.toMutableSet().apply {
+                    add("$id|$title|$url|$category")
+                }
+                prefs.edit().putStringSet("pwas", updated).apply()
+                refreshTopBarMenus()
+                Log.i("PwaRegistry", "Successfully registered dynamic PWA: $title")
+            }
+        }
+    }
+
+    fun registerDynamicExtensionFromWeb(name: String, script: String) {
+        runOnUiThread {
+            if (dynamicExtensions.none { it.name == name }) {
+                dynamicExtensions.add(DynamicExtension(name, script))
+                val prefs = getSharedPreferences("dynamic_registry", Context.MODE_PRIVATE)
+                val set = prefs.getStringSet("extensions", mutableSetOf()) ?: mutableSetOf()
+                val updated = set.toMutableSet().apply {
+                    add("$name|$script")
+                }
+                prefs.edit().putStringSet("extensions", updated).apply()
+                refreshTopBarMenus()
+                
+                // Inject extension script into the active WebView immediately
+                getActiveWebView()?.evaluateJavascript(script, null)
+                Log.i("PwaRegistry", "Successfully registered dynamic Extension: $name")
+            }
+        }
+    }
+
+    private fun loadDynamicRegistry() {
+        val prefs = getSharedPreferences("dynamic_registry", Context.MODE_PRIVATE)
+        val pwaSet = prefs.getStringSet("pwas", emptySet()) ?: emptySet()
+        for (item in pwaSet) {
+            val parts = item.split("|")
+            if (parts.size >= 4) {
+                dynamicPwas.add(DynamicPwa(parts[0], parts[1], parts[2], parts[3]))
+            }
+        }
+        val extSet = prefs.getStringSet("extensions", emptySet()) ?: emptySet()
+        for (item in extSet) {
+            val parts = item.split("|")
+            if (parts.size >= 2) {
+                dynamicExtensions.add(DynamicExtension(parts[0], parts[1]))
+            }
+        }
+    }
+
     private lateinit var workspaceContainer: FrameLayout
     private lateinit var rootLayout: LinearLayout
     private lateinit var tabScroll: HorizontalScrollView
@@ -231,6 +291,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        loadDynamicRegistry()
 
         supportActionBar?.hide()
 
@@ -1033,25 +1094,39 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        val allApps = listOf(
-            MacMenuItem("Spotlight Search") { toggleSpotlightSearch() },
-            MacMenuItem("Web Browser") { openOrSwitchTab("web_" + System.currentTimeMillis(), "https://www.google.com", "Google") },
-            MacMenuItem("Files (Nautilus)") { openOrSwitchTab("files", "file:///android_asset/files/index.html", "Files") },
-            MacMenuItem("Settings (GNOME)") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") },
-            MacMenuItem("System Settings") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") },
-            MacMenuItem("Restart Shell") { recreate() },
-            MacMenuItem("Shut Down") { finish() }
-        )
+        val allApps = mutableListOf<MacMenuItem>().apply {
+            add(MacMenuItem("Spotlight Search") { toggleSpotlightSearch() })
+            add(MacMenuItem("Web Browser") { openOrSwitchTab("web_" + System.currentTimeMillis(), "https://www.google.com", "Google") })
+            add(MacMenuItem("Files (Nautilus)") { openOrSwitchTab("files", "file:///android_asset/files/index.html", "Files") })
+            add(MacMenuItem("Settings (GNOME)") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") })
+            add(MacMenuItem("System Settings") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") })
+            
+            for (pwa in dynamicPwas) {
+                add(MacMenuItem(pwa.title) { openOrSwitchTab(pwa.id, pwa.url, pwa.title) })
+            }
+            
+            for (ext in dynamicExtensions) {
+                add(MacMenuItem("🧩 ${ext.name}") {
+                    showToast("Extension ${ext.name} is active in all WebViews")
+                })
+            }
 
-        val categories = listOf(
-            MacMenuItem("Accessories  ▶"),
-            MacMenuItem("Internet  ▶"),
-            MacMenuItem("System Tools  ▶"),
-            MacMenuItem("Preferences  ▶"),
-            MacMenuItem(isSeparator = true),
-            MacMenuItem("Restart Shell") { recreate() },
-            MacMenuItem("Shut Down") { finish() }
-        )
+            add(MacMenuItem("Restart Shell") { recreate() })
+            add(MacMenuItem("Shut Down") { finish() })
+        }
+
+        val categories = mutableListOf<MacMenuItem>().apply {
+            add(MacMenuItem("Accessories  ▶"))
+            add(MacMenuItem("Internet  ▶"))
+            add(MacMenuItem("System Tools  ▶"))
+            add(MacMenuItem("Preferences  ▶"))
+            if (dynamicExtensions.isNotEmpty()) {
+                add(MacMenuItem("Extensions  ▶"))
+            }
+            add(MacMenuItem(isSeparator = true))
+            add(MacMenuItem("Restart Shell") { recreate() })
+            add(MacMenuItem("Shut Down") { finish() })
+        }
 
         fun drawRows(items: List<MacMenuItem>) {
             itemsContainer.removeAllViews()
@@ -1085,19 +1160,50 @@ class MainActivity : AppCompatActivity() {
 
                                 if (item.title.contains("▶")) {
                                     val subItems = when {
-                                        item.title.startsWith("Accessories") -> listOf(
-                                            MacMenuItem("Spotlight Search") { toggleSpotlightSearch() }
-                                        )
-                                        item.title.startsWith("Internet") -> listOf(
-                                            MacMenuItem("Web Browser") { openOrSwitchTab("web_" + System.currentTimeMillis(), "https://www.google.com", "Google") }
-                                        )
-                                        item.title.startsWith("System Tools") -> listOf(
-                                            MacMenuItem("Files (Nautilus)") { openOrSwitchTab("files", "file:///android_asset/files/index.html", "Files") },
-                                            MacMenuItem("Settings (GNOME)") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") }
-                                        )
-                                        item.title.startsWith("Preferences") -> listOf(
-                                            MacMenuItem("System Settings") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") }
-                                        )
+                                        item.title.startsWith("Accessories") -> {
+                                            val list = mutableListOf(
+                                                MacMenuItem("Spotlight Search") { toggleSpotlightSearch() }
+                                            )
+                                            for (pwa in dynamicPwas.filter { it.category.equals("Accessories", ignoreCase = true) }) {
+                                                list.add(MacMenuItem(pwa.title) { openOrSwitchTab(pwa.id, pwa.url, pwa.title) })
+                                            }
+                                            list
+                                        }
+                                        item.title.startsWith("Internet") -> {
+                                            val list = mutableListOf(
+                                                MacMenuItem("Web Browser") { openOrSwitchTab("web_" + System.currentTimeMillis(), "https://www.google.com", "Google") }
+                                            )
+                                            for (pwa in dynamicPwas.filter { it.category.equals("Internet", ignoreCase = true) }) {
+                                                list.add(MacMenuItem(pwa.title) { openOrSwitchTab(pwa.id, pwa.url, pwa.title) })
+                                            }
+                                            list
+                                        }
+                                        item.title.startsWith("System Tools") -> {
+                                            val list = mutableListOf(
+                                                MacMenuItem("Files (Nautilus)") { openOrSwitchTab("files", "file:///android_asset/files/index.html", "Files") },
+                                                MacMenuItem("Settings (GNOME)") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") }
+                                            )
+                                            for (pwa in dynamicPwas.filter { it.category.equals("System Tools", ignoreCase = true) }) {
+                                                list.add(MacMenuItem(pwa.title) { openOrSwitchTab(pwa.id, pwa.url, pwa.title) })
+                                            }
+                                            list
+                                        }
+                                        item.title.startsWith("Preferences") -> {
+                                            val list = mutableListOf(
+                                                MacMenuItem("System Settings") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") }
+                                            )
+                                            for (pwa in dynamicPwas.filter { it.category.equals("Preferences", ignoreCase = true) }) {
+                                                list.add(MacMenuItem(pwa.title) { openOrSwitchTab(pwa.id, pwa.url, pwa.title) })
+                                            }
+                                            list
+                                        }
+                                        item.title.startsWith("Extensions") -> {
+                                            dynamicExtensions.map { ext ->
+                                                MacMenuItem("🧩 ${ext.name}") {
+                                                    showToast("Extension ${ext.name} is active in all WebViews")
+                                                }
+                                            }
+                                        }
                                         else -> emptyList()
                                     }
 
@@ -1954,6 +2060,11 @@ class MainActivity : AppCompatActivity() {
                         """.trimIndent(),
                         null
                     )
+                    
+                    // Inject dynamically registered extensions
+                    for (ext in dynamicExtensions) {
+                        view?.evaluateJavascript(ext.script, null)
+                    }
                 }
             }
         }
