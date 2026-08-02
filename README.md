@@ -20,8 +20,12 @@ This repository contains the source code for **Anodyne Desktop**, a web-first de
 
 ---
 
-## Architecture Setup
+## Architecture & Security Setup
 
-- **Frontend**: A Momentum-style dashboard and local PWAs bundle located in `app/src/main/assets/`.
-- **Bridge**: A custom Kotlin bridge class `AndroidSysContext` attached as `sysContext` inside the WebViews, mapping system metrics and tab routing.
-- **Secondary Display**: Dynamic monitors auto-resolution detection and `DesktopPresentation` layouts via Android's `DisplayManager`.
+* **Frontend**: A Momentum-style dashboard and local asset-based PWAs bundled inside `app/src/main/assets/`.
+* **Secure Web-to-Native Bridge**: Replaced raw Javascript interface bindings with origin-verified `WebMessagePort` asynchronous channels (`window.anodyneIPC`). All local web apps communicate asynchronously via stringified JSON action-event structures.
+* **Sandbox & File Security**: Enforces strict local directory access controls (`allowFileAccess = false`, `allowContentAccess = false`). File transfers are routed securely via system intent file pickers and standard public download streams.
+* **WebRTC Remote Input Protection**: Sanitizes and clamps float coordinates to `[0.0, 1.0]` viewport boundaries and maps context inputs directly to native context dialog triggers to reject malicious script execution.
+* **Secondary Display**: Emulates multi-monitor workspace switching and custom display scaling via Android's `DisplayManager` and native `DesktopPresentation` layouts.
+* **Status Indicators**: Topbar features interactive Wi-Fi (SSID queries), cellular data (4G/5G signal indicators), battery metrics, active downloads tracking, and a native hardware session kill-switch overlay.
+
