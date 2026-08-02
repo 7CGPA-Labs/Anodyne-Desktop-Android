@@ -407,10 +407,10 @@
                     <span class="icon">💾</span>
                     <span class="label">Storage & Drafts</span>
                 </li>
-                <li id="cat-web-apps" onclick="switchCategory('web-apps')">
-                    <span class="icon">🌐</span>
-                    <span class="label">Default Web Apps</span>
-                </li>
+                 <li id="cat-web-apps" onclick="switchCategory('web-apps')">
+                     <span class="icon">🌐</span>
+                     <span class="label">Web Apps & Exts</span>
+                 </li>
             </ul>
         </aside>
 
@@ -780,6 +780,42 @@
                             </div>
                         </div>
                     </div>
+
+                    <div class="pref-group-title">Installed Web Apps (PWAs)</div>
+                    <div class="pref-group">
+                        <div id="installed-pwas-list" style="display: flex; flex-direction: column; gap: 4px; padding: 6px 0;">
+                            <!-- Dynamically loaded -->
+                        </div>
+                    </div>
+
+                    <div class="pref-group-title">Install New Web App (PWA)</div>
+                    <div class="pref-group" style="padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+                        <input type="text" id="install-pwa-name" placeholder="App Name (e.g. Calculator)" class="text-input" style="width: 100%; box-sizing: border-box;">
+                        <input type="text" id="install-pwa-url" placeholder="App URL (https://...)" class="text-input" style="width: 100%; box-sizing: border-box;">
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <select id="install-pwa-category" class="dropdown" style="flex: 1;">
+                                <option value="Accessories">Accessories</option>
+                                <option value="Internet">Internet</option>
+                                <option value="System Tools">System Tools</option>
+                                <option value="Preferences">Preferences</option>
+                            </select>
+                            <button class="btn btn-primary" onclick="submitPwaInstall()" style="padding: 8px 16px;">Install App</button>
+                        </div>
+                    </div>
+
+                    <div class="pref-group-title">Installed Browser Extensions</div>
+                    <div class="pref-group">
+                        <div id="installed-extensions-list" style="display: flex; flex-direction: column; gap: 4px; padding: 6px 0;">
+                            <!-- Dynamically loaded -->
+                        </div>
+                    </div>
+
+                    <div class="pref-group-title">Install New Extension</div>
+                    <div class="pref-group" style="padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+                        <input type="text" id="install-ext-name" placeholder="Extension Name (e.g. Dark Mode)" class="text-input" style="width: 100%; box-sizing: border-box;">
+                        <textarea id="install-ext-script" placeholder="Extension JavaScript code..." class="text-input" style="width: 100%; height: 80px; box-sizing: border-box; font-family: monospace; font-size: 0.8rem; padding: 8px; border-radius: 6px; background: #0c0c14; color: white; border: 1px solid #2a2a3a;"></textarea>
+                        <button class="btn btn-primary" onclick="submitExtensionInstall()" style="padding: 8px 16px; align-self: flex-end;">Install Extension</button>
+                    </div>
                 </section>
             </div>
         </main>
@@ -790,6 +826,7 @@
             initializeAnodyneIPCBridge();
             setupSettingListeners();
             switchCategory('display');
+            loadDynamicAppsAndExtensions();
         });
 
         function initializeAnodyneIPCBridge() {
@@ -823,7 +860,7 @@
                 'input': 'Mouse & Keyboard',
                 'remote': 'Remote Help',
                 'storage': 'Storage & Drafts',
-                'web-apps': 'Default Web Apps'
+                'web-apps': 'Web Apps & Extensions'
             };
             document.getElementById("category-title").textContent = titles[cat] || 'Settings';
 
@@ -836,6 +873,9 @@
             }
 
             loadHostSystemStats();
+            if (cat === 'web-apps') {
+                loadDynamicAppsAndExtensions();
+            }
         }
 
         function setupSettingListeners() {
@@ -951,6 +991,119 @@
                 window.sysContext.clearSystemStorage();
             } else {
                 alert("Cleanup Simulated: System temporary databases and cache cleared successfully!");
+            }
+        }
+
+        function loadDynamicAppsAndExtensions() {
+            if (!window.sysContext) return;
+            
+            // Render PWAs list
+            const pwasList = document.getElementById("installed-pwas-list");
+            if (pwasList) {
+                pwasList.innerHTML = "";
+                try {
+                    const pwas = JSON.parse(window.sysContext.getDynamicPwasJson() || "[]");
+                    if (pwas.length === 0) {
+                        pwasList.innerHTML = '<div style="font-size:0.85rem; color:#64748b; padding:4px 14px;">No custom PWAs installed</div>';
+                    } else {
+                        pwas.forEach(pwa => {
+                            const row = document.createElement("div");
+                            row.className = "pref-row";
+                            row.style.borderBottom = "none";
+                            row.style.padding = "6px 14px";
+                            row.innerHTML = `
+                                <div class="pref-text">
+                                    <span class="pref-title">${pwa.title}</span>
+                                    <span class="pref-subtitle">${pwa.url} (${pwa.category})</span>
+                                </div>
+                                <div class="pref-control">
+                                    <button class="btn btn-danger" style="background:#dc2626; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;" onclick="uninstallPwa('${pwa.id}')">Uninstall</button>
+                                </div>
+                            `;
+                            pwasList.appendChild(row);
+                        });
+                    }
+                } catch(e) { console.error(e); }
+            }
+
+            // Render Extensions list
+            const extsList = document.getElementById("installed-extensions-list");
+            if (extsList) {
+                extsList.innerHTML = "";
+                try {
+                    const exts = JSON.parse(window.sysContext.getDynamicExtensionsJson() || "[]");
+                    if (exts.length === 0) {
+                        extsList.innerHTML = '<div style="font-size:0.85rem; color:#64748b; padding:4px 14px;">No custom extensions installed</div>';
+                    } else {
+                        exts.forEach(ext => {
+                            const row = document.createElement("div");
+                            row.className = "pref-row";
+                            row.style.borderBottom = "none";
+                            row.style.padding = "6px 14px";
+                            row.innerHTML = `
+                                <div class="pref-text">
+                                    <span class="pref-title">🧩 ${ext.name}</span>
+                                </div>
+                                <div class="pref-control">
+                                    <button class="btn btn-danger" style="background:#dc2626; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;" onclick="uninstallExtension('${ext.name}')">Remove</button>
+                                </div>
+                            `;
+                            extsList.appendChild(row);
+                        });
+                    }
+                } catch(e) { console.error(e); }
+            }
+        }
+
+        function submitPwaInstall() {
+            const name = document.getElementById("install-pwa-name").value.trim();
+            const url = document.getElementById("install-pwa-url").value.trim();
+            const category = document.getElementById("install-pwa-category").value;
+            if (!name || !url) {
+                alert("Please fill in both Name and URL.");
+                return;
+            }
+            if (window.sysContext && typeof window.sysContext.registerDynamicPwa === 'function') {
+                const id = "pwa_" + Date.now();
+                window.sysContext.registerDynamicPwa(id, name, url, category);
+                document.getElementById("install-pwa-name").value = "";
+                document.getElementById("install-pwa-url").value = "";
+                loadDynamicAppsAndExtensions();
+                alert(`Successfully installed PWA: ${name}`);
+            }
+        }
+
+        function submitExtensionInstall() {
+            const name = document.getElementById("install-ext-name").value.trim();
+            const script = document.getElementById("install-ext-script").value.trim();
+            if (!name || !script) {
+                alert("Please fill in both Name and Script.");
+                return;
+            }
+            if (window.sysContext && typeof window.sysContext.registerDynamicExtension === 'function') {
+                window.sysContext.registerDynamicExtension(name, script);
+                document.getElementById("install-ext-name").value = "";
+                document.getElementById("install-ext-script").value = "";
+                loadDynamicAppsAndExtensions();
+                alert(`Successfully installed Extension: ${name}`);
+            }
+        }
+
+        function uninstallPwa(id) {
+            if (confirm("Are you sure you want to uninstall this PWA?")) {
+                if (window.sysContext && typeof window.sysContext.unregisterDynamicPwa === 'function') {
+                    window.sysContext.unregisterDynamicPwa(id);
+                    loadDynamicAppsAndExtensions();
+                }
+            }
+        }
+
+        function uninstallExtension(name) {
+            if (confirm(`Are you sure you want to remove extension: ${name}?`)) {
+                if (window.sysContext && typeof window.sysContext.unregisterDynamicExtension === 'function') {
+                    window.sysContext.unregisterDynamicExtension(name);
+                    loadDynamicAppsAndExtensions();
+                }
             }
         }
     </script>
