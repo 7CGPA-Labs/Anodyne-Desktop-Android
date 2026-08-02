@@ -234,12 +234,14 @@ class MainActivity : AppCompatActivity() {
                         runOnUiThread {
                             val tab = tabsList.firstOrNull { it.id == "files" }
                             tab?.webView?.evaluateJavascript("if (window.onNativeJobProgressChanged) { window.onNativeJobProgressChanged('$jobId', $p); }", null)
+                            updateNotificationProgress(jobId, "Files (Nautilus)", "Copying Files", "Backup progress: $p%", p)
                         }
                         progress += 10
                     }
                     runOnUiThread {
                         val tab = tabsList.firstOrNull { it.id == "files" }
                         tab?.webView?.evaluateJavascript("if (window.onNativeJobFinished) { window.onNativeJobFinished('$jobId', true, 'Backup Complete'); }", null)
+                        updateNotificationProgress(jobId, "Files (Nautilus)", "Copying Files", "Backup Complete", 100)
                     }
                 }.start()
                 "success"
@@ -397,8 +399,16 @@ class MainActivity : AppCompatActivity() {
     private var lastTouchY = 0f
 
     // Notifications & Media Control Center State
-    data class NotificationItem(val title: String, val text: String, val time: String)
+    data class NotificationItem(
+        val id: String,
+        val source: String,
+        var title: String,
+        var text: String,
+        var time: String,
+        var progress: Int = -1
+    )
     val notificationsList = mutableListOf<NotificationItem>()
+    val expandedSources = mutableSetOf<String>()
     
     var mediaTitle: String = ""
     var mediaArtist: String = ""
@@ -628,9 +638,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         loadDynamicRegistry()
         
-        notificationsList.add(NotificationItem("System Update", "Anodyne Desktop is up to date.", "Just now"))
-        notificationsList.add(NotificationItem("Remote Access Server", "Active connection PIN is $accessPin", "2m ago"))
-        notificationsList.add(NotificationItem("Battery Status", "Running on " + getBatteryPowerSource(), "10m ago"))
+        notificationsList.add(NotificationItem("sys_update", "System", "System Update", "Anodyne Desktop is up to date.", "Just now"))
+        notificationsList.add(NotificationItem("sys_pin", "System", "Remote Access Server", "Active connection PIN is $accessPin", "2m ago"))
+        notificationsList.add(NotificationItem("sys_battery", "System", "Battery Status", "Running on " + getBatteryPowerSource(), "10m ago"))
 
         supportActionBar?.hide()
 
@@ -1780,7 +1790,22 @@ class MainActivity : AppCompatActivity() {
 
     fun addNotificationFromWeb(title: String, body: String) {
         runOnUiThread {
-            notificationsList.add(0, NotificationItem(title, body, "Just now"))
+            val sourceName = getActiveWebView()?.title ?: "Web Page"
+            val uniqueId = "web_" + System.currentTimeMillis()
+            notificationsList.add(0, NotificationItem(uniqueId, sourceName, title, body, "Just now"))
+            refreshGnomeCalendarDropdownIfVisible()
+        }
+    }
+
+    fun updateNotificationProgress(id: String, source: String, title: String, text: String, progress: Int) {
+        runOnUiThread {
+            val existing = notificationsList.find { it.id == id }
+            if (existing != null) {
+                existing.progress = progress
+                existing.text = if (progress >= 100) "Completed" else text
+            } else {
+                notificationsList.add(0, NotificationItem(id, source, title, text, "Just now", progress))
+            }
             refreshGnomeCalendarDropdownIfVisible()
         }
     }
@@ -2964,9 +2989,15 @@ class MainActivity : AppCompatActivity() {
                 }
                 
                 Thread {
+                    val downloadId = "download_" + System.currentTimeMillis()
                     try {
                         val connection = java.net.URL(url).openConnection()
                         connection.setRequestProperty("User-Agent", userAgent)
+                        val totalLength = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                            connection.contentLengthLong
+                        } else {
+                            connection.contentLength.toLong()
+                        }
                         val inputStream = connection.getInputStream()
                         
                         val destFile = java.io.File(
@@ -2977,8 +3008,19 @@ class MainActivity : AppCompatActivity() {
                         
                         val buffer = ByteArray(4096)
                         var bytesRead: Int
+                        var totalBytesRead: Long = 0
+                        var lastLoggedProgress = -1
+                        
                         while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                             outputStream.write(buffer, 0, bytesRead)
+                            totalBytesRead += bytesRead
+                            if (totalLength > 0) {
+                                val p = ((totalBytesRead * 100) / totalLength).toInt()
+                                if (p != lastLoggedProgress) {
+                                    lastLoggedProgress = p
+                                    updateNotificationProgress(downloadId, "Downloads", "Downloading File", "$filename - $p%", p)
+                                }
+                            }
                         }
                         
                         outputStream.close()
@@ -2991,11 +3033,13 @@ class MainActivity : AppCompatActivity() {
                         runOnUiThread {
                             downloadsTrayText.setTextColor(Color.parseColor("#3584e4")) // Highlight blue
                             Toast.makeText(this@MainActivity, "Download finished: $filename", Toast.LENGTH_LONG).show()
+                            updateNotificationProgress(downloadId, "Downloads", "Downloading File", "$filename (Finished)", 100)
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Error downloading file from URL", e)
                         runOnUiThread {
                             Toast.makeText(this@MainActivity, "Download failed for $filename", Toast.LENGTH_SHORT).show()
+                            updateNotificationProgress(downloadId, "Downloads", "Downloading File", "$filename (Failed)", -1)
                         }
                     }
                 }.start()
