@@ -206,6 +206,7 @@ class MainActivity : AppCompatActivity() {
     // Custom dropdown layouts inside workspaceContainer
     private var activeDropdownView: View? = null
     private var activeSubmenuView: View? = null
+    private var activeTabNavDropdown: View? = null
 
     private var currentScale = 1.0f
 
@@ -1799,6 +1800,10 @@ class MainActivity : AppCompatActivity() {
             workspaceContainer.removeView(it)
             activeDropdownView = null
         }
+        activeTabNavDropdown?.let {
+            workspaceContainer.removeView(it)
+            activeTabNavDropdown = null
+        }
     }
 
     private fun showWifiDropdown() {
@@ -2448,6 +2453,9 @@ class MainActivity : AppCompatActivity() {
                 
                 setOnClickListener {
                     switchTab(i)
+                    if (tab.id != "home") {
+                        showTabNavigationDropdown(this, i)
+                    }
                 }
             }
             registerTooltipHover(tabItem) { "Tab: " + tab.title }
@@ -2964,6 +2972,94 @@ class MainActivity : AppCompatActivity() {
         }
 
         showMacMenu(webView, menuItems, isSubMenu = true, subMenuX = x, subMenuY = y)
+    }
+
+    private fun showTabNavigationDropdown(anchorView: View, tabIndex: Int) {
+        activeTabNavDropdown?.let {
+            workspaceContainer.removeView(it)
+            activeTabNavDropdown = null
+        }
+
+        val tab = tabsList.getOrNull(tabIndex) ?: return
+        val webView = tab.webView ?: return
+        val scale = currentScale
+        
+        val pad = dpToPx((4 * scale).toInt())
+        val btnSize = dpToPx((24 * scale).toInt())
+
+        val popupView = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(pad, pad, pad, pad)
+            val borderDrawable = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#12121a"))
+                setStroke(1, Color.parseColor("#2a2a3a"))
+                cornerRadius = dpToPx((4 * scale).toInt()).toFloat()
+            }
+            background = borderDrawable
+            elevation = dpToPx((4 * scale).toInt()).toFloat()
+        }
+
+        fun createNavButton(icon: String, isEnabled: Boolean, action: () -> Unit): TextView {
+            return TextView(this).apply {
+                text = icon
+                setTextColor(if (isEnabled) Color.parseColor("#e2e8f0") else Color.parseColor("#475569"))
+                textSize = 10f * scale
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(btnSize, btnSize).apply {
+                    setMargins(dpToPx((2 * scale).toInt()), 0, dpToPx((2 * scale).toInt()), 0)
+                }
+                background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+                
+                if (isEnabled) {
+                    isClickable = true
+                    setOnHoverListener { v, event ->
+                        if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
+                            v.setBackgroundColor(Color.parseColor("#2a2a3a"))
+                        } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
+                            v.setBackgroundColor(Color.TRANSPARENT)
+                        }
+                        false
+                    }
+                    setOnClickListener {
+                        action()
+                        dismissActiveDropdown()
+                    }
+                }
+            }
+        }
+
+        val backBtn = createNavButton("◀", webView.canGoBack()) {
+            webView.goBack()
+        }
+        val forwardBtn = createNavButton("▶", webView.canGoForward()) {
+            webView.goForward()
+        }
+        val reloadBtn = createNavButton("🔄", true) {
+            webView.reload()
+        }
+
+        popupView.addView(backBtn)
+        popupView.addView(forwardBtn)
+        popupView.addView(reloadBtn)
+
+        popupView.layoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        workspaceContainer.addView(popupView)
+        activeTabNavDropdown = popupView
+
+        popupView.post {
+            val location = IntArray(2)
+            anchorView.getLocationOnScreen(location)
+            popupView.x = location[0].toFloat()
+            popupView.y = (location[1] + anchorView.height + dpToPx(2)).toFloat()
+            popupView.bringToFront()
+            cursorView.bringToFront()
+            if (isTrackpadMode) {
+                touchpadOverlay.bringToFront()
+            }
+        }
     }
 
     private fun scrollActiveWebView(dy: Float) {
