@@ -2406,7 +2406,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun createTabWebView(url: String): WebView {
-        val newWebView = WebView(this).apply {
+        val newWebView = object : WebView(this) {
+            override fun startActionMode(callback: android.view.ActionMode.Callback?, type: Int): android.view.ActionMode? {
+                showWebPageContextMenu(this, lastTouchX, lastTouchY)
+                val wrapped = object : android.view.ActionMode.Callback2() {
+                    override fun onCreateActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?): Boolean {
+                        menu?.clear()
+                        return true
+                    }
+                    override fun onPrepareActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?): Boolean {
+                        menu?.clear()
+                        return false
+                    }
+                    override fun onActionItemClicked(mode: android.view.ActionMode?, item: android.view.MenuItem?): Boolean = false
+                    override fun onDestroyActionMode(mode: android.view.ActionMode?) {}
+                }
+                return super.startActionMode(wrapped, type)
+            }
+        }.apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
@@ -2423,9 +2440,16 @@ class MainActivity : AppCompatActivity() {
             setOnLongClickListener { v ->
                 val webView = v as? WebView
                 if (webView != null) {
-                    showWebPageContextMenu(webView, lastTouchX, lastTouchY)
+                    val type = webView.hitTestResult.type
+                    if (type == WebView.HitTestResult.UNKNOWN_TYPE || type == WebView.HitTestResult.EDIT_TEXT_TYPE) {
+                        false // Let WebView select text and call startActionMode
+                    } else {
+                        showWebPageContextMenu(webView, lastTouchX, lastTouchY)
+                        true
+                    }
+                } else {
+                    true
                 }
-                true
             }
 
             webViewClient = object : WebViewClient() {
@@ -3460,40 +3484,108 @@ class MainActivity : AppCompatActivity() {
 
     private fun showWebPageContextMenu(webView: WebView, x: Float, y: Float) {
         dismissActiveDropdown()
-        val pageUrl = webView.url ?: ""
-        val pageTitle = webView.title ?: "Web App"
+        
+        webView.evaluateJavascript("(function() { return window.getSelection().toString(); })()") { selection ->
+            val rawSelection = selection?.trim() ?: ""
+            // Remove enclosing quotes from Javascript output string if present
+            val selectedText = if (rawSelection.startsWith("\"") && rawSelection.endsWith("\"") && rawSelection.length >= 2) {
+                rawSelection.substring(1, rawSelection.length - 1)
+            } else {
+                rawSelection
+            }.trim()
 
-        val menuItems = mutableListOf<MacMenuItem>()
-        menuItems.add(MacMenuItem("Reload") { webView.reload() })
-        
-        if (webView.canGoBack()) {
-            menuItems.add(MacMenuItem("Back") { webView.goBack() })
-        }
-        if (webView.canGoForward()) {
-            menuItems.add(MacMenuItem("Forward") { webView.goForward() })
-        }
-        
-        menuItems.add(MacMenuItem(isSeparator = true))
-        
-        val isSystemPage = pageUrl.startsWith("file://") || pageUrl.isEmpty()
-        val isAlreadyInstalled = dynamicPwas.any { it.url == pageUrl }
-        
-        if (!isSystemPage && !isAlreadyInstalled) {
-            menuItems.add(MacMenuItem("Install Page as PWA") {
-                AlertDialog.Builder(this)
-                    .setTitle("Install Application")
-                    .setMessage("Do you want to install \"$pageTitle\" to your App Drawer?")
-                    .setPositiveButton("Install") { _, _ ->
-                        val id = "pwa_" + System.currentTimeMillis()
-                        registerDynamicPwaFromWeb(id, pageTitle, pageUrl, "Internet")
-                        showToast("\"$pageTitle\" has been installed to the App Drawer!")
+            val pageUrl = webView.url ?: ""
+            val pageTitle = webView.title ?: "Web App"
+            val hitTest = webView.hitTestResult
+            val hitType = hitTest.type
+            val hitExtra = hitTest.extra ?: ""
+
+            val menuItems = mutableListOf<MacMenuItem>()
+
+            if (selectedText.isNotEmpty()) {
+                menuItems.add(MacMenuItem("📋 Copy") {
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("Selected Text", selectedText)
+                    clipboard.setPrimaryClip(clip)
+                    showToast("Text copied to clipboard")
+                })
+                val searchLabel = if (selectedText.length > 20) selectedText.take(17) + "..." else selectedText
+                menuItems.add(MacMenuItem("🔍 Search Google for \"$searchLabel\"") {
+                    try {
+                        val searchUrl = "https://www.google.com/search?q=" + java.net.URLEncoder.encode(selectedText, "UTF-8")
+                        openOrSwitchTab("search_" + System.currentTimeMillis(), searchUrl, "Google Search")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Search URL encode error", e)
                     }
-                    .setNegativeButton("Cancel", null)
-                    .show()
-            })
-        }
+                })
+                menuItems.add(MacMenuItem("🌐 Translate") {
+                    try {
+                        val transUrl = "https://translate.google.com/?sl=auto&text=" + java.net.URLEncoder.encode(selectedText, "UTF-8")
+                        openOrSwitchTab("trans_" + System.currentTimeMillis(), transUrl, "Translate")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Translate URL encode error", e)
+                    }
+                })
+                menuItems.add(MacMenuItem(isSeparator = true))
+            } else if (hitType == WebView.HitTestResult.SRC_ANCHOR_TYPE || hitType == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
+                menuItems.add(MacMenuItem("🔗 Open Link in New Tab") {
+                    openOrSwitchTab("link_" + System.currentTimeMillis(), hitExtra, "New Tab")
+                })
+                menuItems.add(MacMenuItem("📋 Copy Link Address") {
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("Link Address", hitExtra)
+                    clipboard.setPrimaryClip(clip)
+                    showToast("Link address copied")
+                })
+                menuItems.add(MacMenuItem(isSeparator = true))
+            } else if (hitType == WebView.HitTestResult.IMAGE_TYPE) {
+                menuItems.add(MacMenuItem("🖼️ Open Image in New Tab") {
+                    openOrSwitchTab("img_" + System.currentTimeMillis(), hitExtra, "Image")
+                })
+                menuItems.add(MacMenuItem("📋 Copy Image Link") {
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("Image Link", hitExtra)
+                    clipboard.setPrimaryClip(clip)
+                    showToast("Image link copied")
+                })
+                menuItems.add(MacMenuItem(isSeparator = true))
+            }
 
-        showMacMenu(webView, menuItems, isSubMenu = false, subMenuX = x, subMenuY = y, useDirectCoords = true)
+            menuItems.add(MacMenuItem("🔄 Reload") { webView.reload() })
+            if (webView.canGoBack()) {
+                menuItems.add(MacMenuItem("◀ Back") { webView.goBack() })
+            }
+            if (webView.canGoForward()) {
+                menuItems.add(MacMenuItem("▶ Forward") { webView.goForward() })
+            }
+            
+            menuItems.add(MacMenuItem(isSeparator = true))
+            menuItems.add(MacMenuItem("🖨️ Print Page") {
+                printActiveTab()
+            })
+
+            val isSystemPage = pageUrl.startsWith("file://") || pageUrl.isEmpty()
+            val isAlreadyInstalled = dynamicPwas.any { it.url == pageUrl }
+            
+            if (!isSystemPage && !isAlreadyInstalled) {
+                menuItems.add(MacMenuItem("📥 Install Page as PWA") {
+                    AlertDialog.Builder(this)
+                        .setTitle("Install Application")
+                        .setMessage("Do you want to install \"$pageTitle\" to your App Drawer?")
+                        .setPositiveButton("Install") { _, _ ->
+                            val id = "pwa_" + System.currentTimeMillis()
+                            registerDynamicPwaFromWeb(id, pageTitle, pageUrl, "Internet")
+                            showToast("\"$pageTitle\" has been installed to the App Drawer!")
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                })
+            }
+
+            runOnUiThread {
+                showMacMenu(webView, menuItems, isSubMenu = false, subMenuX = x, subMenuY = y, useDirectCoords = true)
+            }
+        }
     }
 
     private fun showTabNavigationDropdown(anchorView: View, tabIndex: Int) {
