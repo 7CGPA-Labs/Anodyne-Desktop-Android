@@ -51,7 +51,8 @@ class MainActivity : AppCompatActivity() {
         val id: String,
         val url: String,
         var title: String,
-        val webView: WebView
+        val webView: WebView,
+        var favicon: android.graphics.Bitmap? = null
     )
 
     class MacMenuItem(
@@ -2612,6 +2613,32 @@ class MainActivity : AppCompatActivity() {
         }
 
         newWebView.webChromeClient = object : android.webkit.WebChromeClient() {
+            override fun onReceivedIcon(view: WebView?, icon: android.graphics.Bitmap?) {
+                super.onReceivedIcon(view, icon)
+                if (icon != null) {
+                    val tab = tabsList.find { it.webView == view }
+                    if (tab != null) {
+                        tab.favicon = icon
+                        runOnUiThread {
+                            refreshTabUI()
+                        }
+                    }
+                }
+            }
+
+            override fun onReceivedTitle(view: WebView?, title: String?) {
+                super.onReceivedTitle(view, title)
+                if (!title.isNullOrEmpty()) {
+                    val tab = tabsList.find { it.webView == view }
+                    if (tab != null && tab.id != "home") {
+                        tab.title = title
+                        runOnUiThread {
+                            refreshTabUI()
+                        }
+                    }
+                }
+            }
+
             override fun onGeolocationPermissionsShowPrompt(
                 origin: String?,
                 callback: android.webkit.GeolocationPermissions.Callback?
@@ -2939,6 +2966,35 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             registerTooltipHover(tabItem) { "Tab: " + tab.title }
+            val favIcon = ImageView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    dpToPx((14 * currentScale).toInt()),
+                    dpToPx((14 * currentScale).toInt())
+                ).apply {
+                    rightMargin = dpToPx((6 * currentScale).toInt())
+                }
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                if (tab.favicon != null) {
+                    setImageBitmap(tab.favicon)
+                } else {
+                    val fallbackBmp = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(fallbackBmp)
+                    val p = Paint().apply {
+                        color = Color.parseColor("#475569")
+                        isAntiAlias = true
+                    }
+                    canvas.drawCircle(8f, 8f, 7f, p)
+                    val textPaint = Paint().apply {
+                        color = Color.WHITE
+                        textSize = 10f
+                        textAlign = Paint.Align.CENTER
+                        isAntiAlias = true
+                    }
+                    canvas.drawText("w", 8f, 11.5f, textPaint)
+                    setImageBitmap(fallbackBmp)
+                }
+            }
+            tabItem.addView(favIcon)
 
             val titleText = TextView(this).apply {
                 text = tab.title
