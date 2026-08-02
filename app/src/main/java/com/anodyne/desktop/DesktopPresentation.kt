@@ -1277,6 +1277,7 @@ class DesktopPresentation(
     }
 
     private fun showWebPageContextMenu(webView: WebView, x: Float, y: Float) {
+        dismissActiveDropdown()
         val pageUrl = webView.url ?: ""
         val pageTitle = webView.title ?: "Web App"
 

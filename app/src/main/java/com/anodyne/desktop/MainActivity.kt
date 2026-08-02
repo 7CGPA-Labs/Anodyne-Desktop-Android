@@ -3150,6 +3150,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showWebPageContextMenu(webView: WebView, x: Float, y: Float) {
+        dismissActiveDropdown()
         val pageUrl = webView.url ?: ""
         val pageTitle = webView.title ?: "Web App"
 
@@ -3187,10 +3188,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showTabNavigationDropdown(anchorView: View, tabIndex: Int) {
-        activeTabNavDropdown?.let {
-            workspaceContainer.removeView(it)
-            activeTabNavDropdown = null
-        }
+        dismissActiveDropdown()
 
         val tab = tabsList.getOrNull(tabIndex) ?: return
         val webView = tab.webView ?: return
