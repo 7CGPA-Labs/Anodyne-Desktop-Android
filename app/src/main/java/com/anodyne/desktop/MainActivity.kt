@@ -1040,11 +1040,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
         val titleView = TextView(this).apply {
-            text = "Ano"
+            text = "Anodyne OS"
             setTextColor(Color.WHITE)
             textSize = 24f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+            }
             setPadding(0, dpToPx(16), 0, 0)
         }
         val subtitleView = TextView(this).apply {
