@@ -1568,8 +1568,79 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         setOnClickListener {
-                            dismissActiveDropdown()
-                            item.action?.invoke()
+                            if (item.title.contains("▶")) {
+                                val subItems = when {
+                                    item.title.startsWith("Accessories") -> {
+                                        val list = mutableListOf(
+                                            MacMenuItem("Spotlight Search") { toggleSpotlightSearch() }
+                                        )
+                                        for (pwa in dynamicPwas.filter { it.category.equals("Accessories", ignoreCase = true) }) {
+                                            list.add(MacMenuItem(pwa.title) { openOrSwitchTab(pwa.id, pwa.url, pwa.title) })
+                                        }
+                                        list
+                                    }
+                                    item.title.startsWith("Internet") -> {
+                                        val list = mutableListOf(
+                                            MacMenuItem("Web Browser") { openOrSwitchTab("web_" + System.currentTimeMillis(), "https://www.google.com", "Google") }
+                                        )
+                                        for (pwa in dynamicPwas.filter { it.category.equals("Internet", ignoreCase = true) }) {
+                                            list.add(MacMenuItem(pwa.title) { openOrSwitchTab(pwa.id, pwa.url, pwa.title) })
+                                        }
+                                        list
+                                    }
+                                    item.title.startsWith("System Tools") -> {
+                                        val list = mutableListOf(
+                                            MacMenuItem("Files (Nautilus)") { openOrSwitchTab("files", "file:///android_asset/files/index.html", "Files") },
+                                            MacMenuItem("Settings (GNOME)") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") }
+                                        )
+                                        for (pwa in dynamicPwas.filter { it.category.equals("System Tools", ignoreCase = true) }) {
+                                            list.add(MacMenuItem(pwa.title) { openOrSwitchTab(pwa.id, pwa.url, pwa.title) })
+                                        }
+                                        list
+                                    }
+                                    item.title.startsWith("Preferences") -> {
+                                        val list = mutableListOf(
+                                            MacMenuItem("System Settings") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") }
+                                        )
+                                        for (pwa in dynamicPwas.filter { it.category.equals("Preferences", ignoreCase = true) }) {
+                                            list.add(MacMenuItem(pwa.title) { openOrSwitchTab(pwa.id, pwa.url, pwa.title) })
+                                        }
+                                        list
+                                    }
+                                    item.title.startsWith("Extensions") -> {
+                                        dynamicExtensions.map { ext ->
+                                            MacMenuItem("🧩 ${ext.name}") {
+                                                showToast("Extension ${ext.name} is active in all WebViews")
+                                            }
+                                        }
+                                    }
+                                    else -> emptyList()
+                                }
+
+                                if (currentSubmenuCat == item.title) {
+                                    activeSubmenuView?.let { sub ->
+                                        workspaceContainer.removeView(sub)
+                                        activeSubmenuView = null
+                                    }
+                                    currentSubmenuCat = null
+                                } else {
+                                    currentSubmenuCat = item.title
+                                    val loc = IntArray(2)
+                                    getLocationOnScreen(loc)
+                                    val mainX = activeDropdownView?.x ?: 0f
+                                    val mainW = activeDropdownView?.width ?: 0
+
+                                    activeSubmenuView?.let { sub ->
+                                        workspaceContainer.removeView(sub)
+                                        activeSubmenuView = null
+                                    }
+
+                                    showMacMenu(this, subItems, isSubMenu = true, subMenuX = mainX + mainW + dpToPx(4), subMenuY = loc[1].toFloat())
+                                }
+                            } else {
+                                dismissActiveDropdown()
+                                item.action?.invoke()
+                            }
                         }
                     }
                     itemsContainer.addView(row)
