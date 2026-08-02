@@ -1835,10 +1835,11 @@ class MainActivity : AppCompatActivity() {
         refreshGnomeCalendarDropdownIfVisible()
     }
 
-    private fun refreshGnomeCalendarDropdownIfVisible() {
+    fun refreshGnomeCalendarDropdownIfVisible() {
         if (activeDropdownView?.tag == "gnome_calendar") {
             showGnomeCalendarDropdown(clockTextView)
         }
+        presentation?.refreshGnomeCalendarDropdownIfVisible()
     }
 
     fun triggerWebMediaAction(action: String) {

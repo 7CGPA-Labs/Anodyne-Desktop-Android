@@ -609,15 +609,26 @@ class DesktopPresentation(
     private fun showSubMenu(anchorView: View, items: List<MacMenuItem>) {
     }
 
+    fun refreshGnomeCalendarDropdownIfVisible() {
+        clockHandler.post {
+            if (activeDropdownView?.tag == "gnome_calendar") {
+                showGnomeCalendarDropdown(clockTextView)
+            }
+        }
+    }
+
     // GNOME-style Calendar & Notification panel for secondary presentation screens inside workspaceContainer
     private fun showGnomeCalendarDropdown(anchorView: View) {
         dismissActiveDropdown()
 
         val scale = currentScale
         val popupWidth = dpToPx((380 * scale).toInt())
-        val popupHeight = dpToPx((230 * scale).toInt())
+        val popupHeight = dpToPx((270 * scale).toInt()) // Increased height for media widget
+        
+        val mainAct = context as? MainActivity
         
         val rootDropdown = LinearLayout(context).apply {
+            tag = "gnome_calendar"
             orientation = LinearLayout.HORIZONTAL
             setPadding(dpToPx((12 * scale).toInt()), dpToPx((12 * scale).toInt()), dpToPx((12 * scale).toInt()), dpToPx((12 * scale).toInt()))
             val borderDrawable = android.graphics.drawable.GradientDrawable().apply {
@@ -637,14 +648,40 @@ class DesktopPresentation(
             }
         }
 
+        // Clear all button in header
+        val headerLayout = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dpToPx((8 * scale).toInt()))
+        }
         val notifHeader = TextView(context).apply {
             text = "Notifications"
             setTextColor(Color.parseColor("#94a3b8"))
             textSize = 9.5f * scale
             typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setPadding(0, 0, 0, dpToPx((8 * scale).toInt()))
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
-        notificationsLayout.addView(notifHeader)
+        headerLayout.addView(notifHeader)
+
+        val activeList = mainAct?.notificationsList ?: emptyList()
+
+        if (activeList.isNotEmpty()) {
+            val clearAllBtn = TextView(context).apply {
+                text = "Clear All"
+                setTextColor(Color.parseColor("#3584e4"))
+                textSize = 8f * scale
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setPadding(dpToPx(4), dpToPx(2), dpToPx(4), dpToPx(2))
+                setOnClickListener {
+                    mainAct?.notificationsList?.clear()
+                    mainAct?.runOnUiThread {
+                        mainAct.refreshGnomeCalendarDropdownIfVisible()
+                    }
+                }
+            }
+            headerLayout.addView(clearAllBtn)
+        }
+        notificationsLayout.addView(headerLayout)
 
         val notifScroll = android.widget.ScrollView(context).apply {
             layoutParams = LinearLayout.LayoutParams(
@@ -658,57 +695,259 @@ class DesktopPresentation(
             orientation = LinearLayout.VERTICAL
         }
 
-        val addNotification = { titleStr: String, textStr: String, timeStr: String ->
-            val item = LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dpToPx((6 * scale).toInt()), dpToPx((6 * scale).toInt()), dpToPx((6 * scale).toInt()), dpToPx((6 * scale).toInt()))
+        // Group notifications by source
+        val groups = activeList.groupBy { it.source }
+        
+        for ((source, items) in groups) {
+            val isExpanded = mainAct?.expandedSources?.contains(source) == true
+            
+            if (items.size > 1) {
+                val groupHeader = LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dpToPx(2), dpToPx(4), dpToPx(2), dpToPx(4))
+                }
+                val sourceTitle = TextView(context).apply {
+                    text = "$source (${items.size})"
+                    setTextColor(Color.parseColor("#e2e8f0"))
+                    textSize = 8f * scale
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                }
+                groupHeader.addView(sourceTitle)
+                
+                val toggleBtn = TextView(context).apply {
+                    text = if (isExpanded) "Collapse" else "Expand (${items.size - 1} more)"
+                    setTextColor(Color.parseColor("#64748b"))
+                    textSize = 7.5f * scale
+                    setPadding(dpToPx(4), dpToPx(2), dpToPx(4), dpToPx(2))
+                    setOnClickListener {
+                        if (isExpanded) {
+                            mainAct?.expandedSources?.remove(source)
+                        } else {
+                            mainAct?.expandedSources?.add(source)
+                        }
+                        mainAct?.runOnUiThread {
+                            mainAct.refreshGnomeCalendarDropdownIfVisible()
+                        }
+                    }
+                }
+                groupHeader.addView(toggleBtn)
+                notifList.addView(groupHeader)
+            }
+
+            val visibleItems = if (isExpanded || items.size <= 1) items else listOf(items.first())
+            for (notif in visibleItems) {
+                val itemCard = LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dpToPx((6 * scale).toInt()), dpToPx((6 * scale).toInt()), dpToPx((6 * scale).toInt()), dpToPx((6 * scale).toInt()))
+                    val bg = android.graphics.drawable.GradientDrawable().apply {
+                        setColor(Color.parseColor("#1a1a26"))
+                        cornerRadius = dpToPx((5 * scale).toInt()).toFloat()
+                    }
+                    background = bg
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        bottomMargin = dpToPx((4 * scale).toInt())
+                    }
+                }
+                
+                val topRow = LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                
+                val titleView = TextView(context).apply {
+                    text = if (items.size <= 1) "[${notif.source}] ${notif.title}" else notif.title
+                    setTextColor(Color.WHITE)
+                    textSize = 8.2f * scale
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
+                }
+                topRow.addView(titleView)
+                
+                val closeBtn = TextView(context).apply {
+                    text = "×"
+                    setTextColor(Color.parseColor("#64748b"))
+                    textSize = 10f * scale
+                    setPadding(dpToPx(4), 0, dpToPx(4), 0)
+                    setOnClickListener {
+                        mainAct?.notificationsList?.remove(notif)
+                        mainAct?.runOnUiThread {
+                            mainAct.refreshGnomeCalendarDropdownIfVisible()
+                        }
+                    }
+                }
+                topRow.addView(closeBtn)
+                itemCard.addView(topRow)
+                
+                val descView = TextView(context).apply {
+                    text = notif.text
+                    setTextColor(Color.parseColor("#94a3b8"))
+                    textSize = 7.8f * scale
+                    setPadding(0, dpToPx((2 * scale).toInt()), 0, 0)
+                }
+                itemCard.addView(descView)
+                
+                if (notif.progress in 0..100) {
+                    val progressLayout = LinearLayout(context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(0, dpToPx((4 * scale).toInt()), 0, 0)
+                    }
+                    val bar = android.widget.ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
+                        max = 100
+                        progress = notif.progress
+                        layoutParams = LinearLayout.LayoutParams(0, dpToPx((6 * scale).toInt()), 1f).apply {
+                            rightMargin = dpToPx((6 * scale).toInt())
+                        }
+                    }
+                    val pct = TextView(context).apply {
+                        text = "${notif.progress}%"
+                        setTextColor(Color.WHITE)
+                        textSize = 7.5f * scale
+                    }
+                    progressLayout.addView(bar)
+                    progressLayout.addView(pct)
+                    itemCard.addView(progressLayout)
+                }
+                
+                notifList.addView(itemCard)
+            }
+        }
+
+        notifScroll.addView(notifList)
+        notificationsLayout.addView(notifScroll)
+
+        // Media Player Widget inside presentation notification center
+        val playbackState = mainAct?.mediaPlaybackState ?: "none"
+        val mediaTitle = mainAct?.mediaTitle ?: ""
+        if (playbackState != "none" && mediaTitle.isNotEmpty()) {
+            val mediaCard = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dpToPx((8 * scale).toInt()), dpToPx((8 * scale).toInt()), dpToPx((8 * scale).toInt()), dpToPx((8 * scale).toInt()))
                 val bg = android.graphics.drawable.GradientDrawable().apply {
-                    setColor(Color.parseColor("#1a1a26"))
-                    cornerRadius = dpToPx((5 * scale).toInt()).toFloat()
+                    setColor(Color.parseColor("#13131c"))
+                    setStroke(dpToPx(1), Color.parseColor("#2a2a3e"))
+                    cornerRadius = dpToPx((8 * scale).toInt()).toFloat()
                 }
                 background = bg
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    bottomMargin = dpToPx((6 * scale).toInt())
+                    topMargin = dpToPx((8 * scale).toInt())
+                }
+                gravity = Gravity.CENTER_VERTICAL
+            }
+
+            val artImage = ImageView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    dpToPx((32 * scale).toInt()),
+                    dpToPx((32 * scale).toInt())
+                ).apply {
+                    rightMargin = dpToPx((8 * scale).toInt())
+                }
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                val artworkUrl = mainAct?.mediaArtworkUrl ?: ""
+                if (artworkUrl.isNotEmpty()) {
+                    val imgView = this
+                    Thread {
+                        try {
+                            val stream = java.net.URL(artworkUrl).openStream()
+                            val bmp = android.graphics.BitmapFactory.decodeStream(stream)
+                            clockHandler.post {
+                                imgView.setImageBitmap(bmp)
+                            }
+                        } catch (e: Exception) {
+                            clockHandler.post {
+                                imgView.setImageResource(android.R.drawable.ic_media_play)
+                            }
+                        }
+                    }.start()
+                } else {
+                    setImageResource(android.R.drawable.ic_media_play)
                 }
             }
-            
-            val tRow = LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
+            mediaCard.addView(artImage)
+
+            val infoLayout = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             }
-            val titleText = TextView(context).apply {
-                text = titleStr
+            val trackTitle = TextView(context).apply {
+                text = mediaTitle
                 setTextColor(Color.WHITE)
                 textSize = 8.5f * scale
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
             }
-            val timeText = TextView(context).apply {
-                text = timeStr
-                setTextColor(Color.parseColor("#64748b"))
-                textSize = 7f * scale
-            }
-            tRow.addView(titleText)
-            tRow.addView(timeText)
-            item.addView(tRow)
-
-            val descText = TextView(context).apply {
-                text = textStr
+            val trackArtist = TextView(context).apply {
+                text = if ((mainAct?.mediaArtist ?: "").isNotEmpty()) mainAct?.mediaArtist else "Unknown Artist"
                 setTextColor(Color.parseColor("#94a3b8"))
-                textSize = 8f * scale
-                setPadding(0, dpToPx((2 * scale).toInt()), 0, 0)
+                textSize = 7.5f * scale
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
             }
-            item.addView(descText)
-            notifList.addView(item)
+            infoLayout.addView(trackTitle)
+            infoLayout.addView(trackArtist)
+            mediaCard.addView(infoLayout)
+
+            val controlsLayout = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+            }
+
+            if (mainAct?.mediaHasPrev == true) {
+                val prevBtn = TextView(context).apply {
+                    text = "⏮"
+                    setTextColor(Color.WHITE)
+                    textSize = 14f * scale
+                    setPadding(dpToPx((6 * scale).toInt()), 0, dpToPx((6 * scale).toInt()), 0)
+                    setOnClickListener {
+                        mainAct.triggerWebMediaAction("previoustrack")
+                    }
+                }
+                controlsLayout.addView(prevBtn)
+            }
+
+            val playPauseBtn = TextView(context).apply {
+                text = if (playbackState == "playing") "⏸" else "▶"
+                setTextColor(Color.WHITE)
+                textSize = 14f * scale
+                setPadding(dpToPx((6 * scale).toInt()), 0, dpToPx((6 * scale).toInt()), 0)
+                setOnClickListener {
+                    if (playbackState == "playing") {
+                        mainAct?.triggerWebMediaAction("pause")
+                    } else {
+                        mainAct?.triggerWebMediaAction("play")
+                    }
+                }
+            }
+            controlsLayout.addView(playPauseBtn)
+
+            if (mainAct?.mediaHasNext == true) {
+                val nextBtn = TextView(context).apply {
+                    text = "⏭"
+                    setTextColor(Color.WHITE)
+                    textSize = 14f * scale
+                    setPadding(dpToPx((6 * scale).toInt()), 0, dpToPx((6 * scale).toInt()), 0)
+                    setOnClickListener {
+                        mainAct.triggerWebMediaAction("nexttrack")
+                    }
+                }
+                controlsLayout.addView(nextBtn)
+            }
+
+            mediaCard.addView(controlsLayout)
+            notificationsLayout.addView(mediaCard)
         }
 
-        addNotification("System Update", "Anodyne Desktop is up to date.", "Just now")
-        addNotification("Battery Status", "Running on " + getBatteryPowerSource(), "10m ago")
-
-        notifScroll.addView(notifList)
-        notificationsLayout.addView(notifScroll)
         rootDropdown.addView(notificationsLayout)
 
         val divider = View(context).apply {
