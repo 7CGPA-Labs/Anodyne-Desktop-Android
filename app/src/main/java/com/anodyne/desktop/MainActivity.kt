@@ -1341,6 +1341,8 @@ class MainActivity : AppCompatActivity() {
             add(MacMenuItem("Shut Down") { finish() })
         }
 
+        var currentSubmenuCat: String? = null
+
         fun drawRows(items: List<MacMenuItem>) {
             itemsContainer.removeAllViews()
             for (item in items) {
@@ -1364,13 +1366,13 @@ class MainActivity : AppCompatActivity() {
                         gravity = Gravity.CENTER_VERTICAL
                         background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
                         isClickable = true
-
+ 
                         setOnHoverListener { v, event ->
                             val tv = v as? TextView
                             if (event.action == MotionEvent.ACTION_HOVER_ENTER || event.action == MotionEvent.ACTION_HOVER_MOVE) {
                                 tv?.setBackgroundColor(Color.parseColor("#3584e4"))
                                 tv?.setTextColor(Color.WHITE)
-
+ 
                                 if (item.title.contains("▶")) {
                                     val subItems = when {
                                         item.title.startsWith("Accessories") -> {
@@ -1420,18 +1422,22 @@ class MainActivity : AppCompatActivity() {
                                         else -> emptyList()
                                     }
 
-                                    val loc = IntArray(2)
-                                    v.getLocationOnScreen(loc)
-                                    val mainX = activeDropdownView?.x ?: 0f
-                                    val mainW = activeDropdownView?.width ?: 0
+                                    if (currentSubmenuCat != item.title) {
+                                        currentSubmenuCat = item.title
+                                        val loc = IntArray(2)
+                                        v.getLocationOnScreen(loc)
+                                        val mainX = activeDropdownView?.x ?: 0f
+                                        val mainW = activeDropdownView?.width ?: 0
 
-                                    activeSubmenuView?.let { sub ->
-                                        workspaceContainer.removeView(sub)
-                                        activeSubmenuView = null
+                                        activeSubmenuView?.let { sub ->
+                                            workspaceContainer.removeView(sub)
+                                            activeSubmenuView = null
+                                        }
+
+                                        showMacMenu(v, subItems, isSubMenu = true, subMenuX = mainX + mainW + dpToPx(4), subMenuY = loc[1].toFloat())
                                     }
-
-                                    showMacMenu(v, subItems, isSubMenu = true, subMenuX = mainX + mainW + dpToPx(4), subMenuY = loc[1].toFloat())
                                 } else {
+                                    currentSubmenuCat = null
                                     activeSubmenuView?.let { sub ->
                                         workspaceContainer.removeView(sub)
                                         activeSubmenuView = null
