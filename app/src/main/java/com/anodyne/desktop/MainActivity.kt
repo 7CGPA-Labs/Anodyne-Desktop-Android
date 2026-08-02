@@ -2886,10 +2886,7 @@ class MainActivity : AppCompatActivity() {
             if (webView != null) {
                 val relativeY = cy - offset
                 if (isRightClick) {
-                    webView.evaluateJavascript(
-                        "var el = document.elementFromPoint($cx, $relativeY); if (el) { el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, button: 2, clientX: $cx, clientY: $relativeY })); }",
-                        null
-                    )
+                    showWebPageContextMenu(webView, cx, cy)
                 } else {
                     val downTime = SystemClock.uptimeMillis()
                     val eventTime = SystemClock.uptimeMillis()
@@ -2928,9 +2925,45 @@ class MainActivity : AppCompatActivity() {
                 rootLayout.dispatchTouchEvent(downEvent)
                 rootLayout.dispatchTouchEvent(upEvent)
                 downEvent.recycle()
-                upEvent.recycle()
             }
         }
+    }
+
+    private fun showWebPageContextMenu(webView: WebView, x: Float, y: Float) {
+        val pageUrl = webView.url ?: ""
+        val pageTitle = webView.title ?: "Web App"
+
+        val menuItems = mutableListOf<MacMenuItem>()
+        menuItems.add(MacMenuItem("Reload") { webView.reload() })
+        
+        if (webView.canGoBack()) {
+            menuItems.add(MacMenuItem("Back") { webView.goBack() })
+        }
+        if (webView.canGoForward()) {
+            menuItems.add(MacMenuItem("Forward") { webView.goForward() })
+        }
+        
+        menuItems.add(MacMenuItem(isSeparator = true))
+        
+        val isSystemPage = pageUrl.startsWith("file://") || pageUrl.isEmpty()
+        val isAlreadyInstalled = dynamicPwas.any { it.url == pageUrl }
+        
+        if (!isSystemPage && !isAlreadyInstalled) {
+            menuItems.add(MacMenuItem("Install Page as PWA") {
+                AlertDialog.Builder(this)
+                    .setTitle("Install Application")
+                    .setMessage("Do you want to install \"$pageTitle\" to your App Drawer?")
+                    .setPositiveButton("Install") { _, _ ->
+                        val id = "pwa_" + System.currentTimeMillis()
+                        registerDynamicPwaFromWeb(id, pageTitle, pageUrl, "Internet")
+                        showToast("\"$pageTitle\" has been installed to the App Drawer!")
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            })
+        }
+
+        showMacMenu(webView, menuItems, isSubMenu = true, subMenuX = x, subMenuY = y)
     }
 
     private fun scrollActiveWebView(dy: Float) {
