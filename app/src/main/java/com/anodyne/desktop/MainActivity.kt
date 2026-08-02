@@ -3232,14 +3232,18 @@ class MainActivity : AppCompatActivity() {
     private fun dispatchHoverAtCursor() {
         val cx = cursorX
         val cy = cursorY
-        
-        // Dispatch hover events to custom menu overlays to trigger button hover colors dynamically
+        val buffer = dpToPx(20).toFloat()
+        var hoveredInsideAnyMenu = false
+        var nearAnyMenu = false
+
         activeDropdownView?.let { menu ->
             val mx = menu.x
             val my = menu.y
             val mw = menu.width
             val mh = menu.height
             if (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh) {
+                hoveredInsideAnyMenu = true
+                nearAnyMenu = true
                 val downTime = SystemClock.uptimeMillis()
                 val eventTime = SystemClock.uptimeMillis()
                 val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx - mx, cy - my, 0).apply {
@@ -3247,15 +3251,19 @@ class MainActivity : AppCompatActivity() {
                 }
                 menu.dispatchGenericMotionEvent(hoverEvent)
                 hoverEvent.recycle()
-                return
+            } else if (cx >= mx - buffer && cx <= mx + mw + buffer && cy >= my - buffer && cy <= my + mh + buffer) {
+                nearAnyMenu = true
             }
         }
+
         activeSubmenuView?.let { sub ->
             val sx = sub.x
             val sy = sub.y
             val sw = sub.width
             val sh = sub.height
             if (cx >= sx && cx <= sx + sw && cy >= sy && cy <= sy + sh) {
+                hoveredInsideAnyMenu = true
+                nearAnyMenu = true
                 val downTime = SystemClock.uptimeMillis()
                 val eventTime = SystemClock.uptimeMillis()
                 val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx - sx, cy - sy, 0).apply {
@@ -3263,15 +3271,19 @@ class MainActivity : AppCompatActivity() {
                 }
                 sub.dispatchGenericMotionEvent(hoverEvent)
                 hoverEvent.recycle()
-                return
+            } else if (cx >= sx - buffer && cx <= sx + sw + buffer && cy >= sy - buffer && cy <= sy + sh + buffer) {
+                nearAnyMenu = true
             }
         }
+
         activeTabNavDropdown?.let { menu ->
             val mx = menu.x
             val my = menu.y
             val mw = menu.width
             val mh = menu.height
             if (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh) {
+                hoveredInsideAnyMenu = true
+                nearAnyMenu = true
                 val downTime = SystemClock.uptimeMillis()
                 val eventTime = SystemClock.uptimeMillis()
                 val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx - mx, cy - my, 0).apply {
@@ -3279,8 +3291,19 @@ class MainActivity : AppCompatActivity() {
                 }
                 menu.dispatchGenericMotionEvent(hoverEvent)
                 hoverEvent.recycle()
-                return
+            } else if (cx >= mx - buffer && cx <= mx + mw + buffer && cy >= my - buffer && cy <= my + mh + buffer) {
+                nearAnyMenu = true
             }
+        }
+
+        val hasActiveMenu = activeDropdownView != null || activeSubmenuView != null || activeTabNavDropdown != null
+        if (hasActiveMenu && !nearAnyMenu) {
+            dismissActiveDropdown()
+            return
+        }
+
+        if (hoveredInsideAnyMenu) {
+            return
         }
 
         val webView = getActiveWebView() ?: return
