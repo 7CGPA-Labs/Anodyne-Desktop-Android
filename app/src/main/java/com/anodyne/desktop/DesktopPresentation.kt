@@ -95,6 +95,7 @@ class DesktopPresentation(
     private lateinit var leftContainer: LinearLayout
 
     private lateinit var wifiTextView: TextView
+    private lateinit var cellularTextView: TextView
     private lateinit var batteryTextView: TextView
     private lateinit var clockTextView: TextView
 
@@ -324,6 +325,15 @@ class DesktopPresentation(
         }
         rightContainer.addView(wifiTextView)
 
+        cellularTextView = TextView(context).apply {
+            text = "📶 " + getCellularNetworkType()
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 8.5f
+            setPadding(dpToPx(2), 0, 0, 0)
+            setOnClickListener { showCellularDropdown() }
+        }
+        rightContainer.addView(cellularTextView)
+
         batteryTextView = TextView(context).apply {
             text = "🔋"
             setTextColor(Color.parseColor("#94a3b8"))
@@ -336,6 +346,7 @@ class DesktopPresentation(
 
         registerTooltipHover(spotlightBtn) { "Spotlight Search" }
         registerTooltipHover(wifiTextView) { "Connected to: " + getWifiSSID() }
+        registerTooltipHover(cellularTextView) { "Cellular: " + getCellularNetworkType() }
         registerTooltipHover(batteryTextView) { "Battery: " + getBatteryPct() + "%" }
 
         rootLayout.addView(topBar)
@@ -1004,6 +1015,37 @@ class DesktopPresentation(
             MacMenuItem(isSeparator = true),
             MacMenuItem("Battery Health: Good")
         ))
+    }
+
+    private fun showCellularDropdown() {
+        showMacMenu(cellularTextView, listOf(
+            MacMenuItem("Carrier: Anodyne Mobile"),
+            MacMenuItem("Signal Strength: Excellent"),
+            MacMenuItem("Network Type: " + getCellularNetworkType()),
+            MacMenuItem(isSeparator = true),
+            MacMenuItem("Data Usage: 14.2 GB used this month")
+        ))
+    }
+
+    private fun getCellularNetworkType(): String {
+        try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val activeNetwork = cm.activeNetwork ?: return "4G"
+            val capabilities = cm.getNetworkCapabilities(activeNetwork) ?: return "4G"
+            
+            if (capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as android.telephony.TelephonyManager
+                if (androidx.core.app.ActivityCompat.checkSelfPermission(context, android.Manifest.permission.READ_PHONE_STATE) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    val networkType = tm.networkType
+                    return when (networkType) {
+                        android.telephony.TelephonyManager.NETWORK_TYPE_NR -> "5G"
+                        android.telephony.TelephonyManager.NETWORK_TYPE_LTE -> "4G"
+                        else -> "4G"
+                    }
+                }
+            }
+        } catch (e: Exception) {}
+        return "5G"
     }
 
     private fun getWifiSSID(): String {

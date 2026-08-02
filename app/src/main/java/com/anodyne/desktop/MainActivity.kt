@@ -384,6 +384,7 @@ class MainActivity : AppCompatActivity() {
     private val downloadRecords = mutableListOf<DownloadRecord>()
 
     private lateinit var wifiTextView: TextView
+    private lateinit var cellularTextView: TextView
     private lateinit var batteryTextView: TextView
     private lateinit var clockTextView: TextView
 
@@ -668,6 +669,15 @@ class MainActivity : AppCompatActivity() {
         }
         rightContainer.addView(wifiTextView)
 
+        cellularTextView = TextView(this).apply {
+            text = "📶 " + getCellularNetworkType()
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 8.5f
+            setPadding(dpToPx(4), 0, 0, 0)
+            setOnClickListener { showCellularDropdown() }
+        }
+        rightContainer.addView(cellularTextView)
+
         batteryTextView = TextView(this).apply {
             text = "🔋"
             setTextColor(Color.parseColor("#94a3b8"))
@@ -713,6 +723,7 @@ class MainActivity : AppCompatActivity() {
         registerTooltipHover(spotlightBtn) { "Spotlight Search" }
         registerTooltipHover(downloadsTrayText) { "Active Downloads" }
         registerTooltipHover(wifiTextView) { "Connected to: " + getWifiSSID() }
+        registerTooltipHover(cellularTextView) { "Cellular: " + getCellularNetworkType() }
         registerTooltipHover(batteryTextView) { "Battery: " + getBatteryPct() + "% (" + getBatteryPowerSource() + ")" }
         registerTooltipHover(scaleToggle) { "Scale: " + (currentScale * 100).toInt() + "%" }
         registerTooltipHover(getHelpToggle) { "Get Remote Help PIN" }
@@ -2015,6 +2026,37 @@ class MainActivity : AppCompatActivity() {
             MacMenuItem(isSeparator = true),
             MacMenuItem("Battery Health: Good")
         ))
+    }
+
+    private fun showCellularDropdown() {
+        showMacMenu(cellularTextView, listOf(
+            MacMenuItem("Carrier: Anodyne Mobile"),
+            MacMenuItem("Signal Strength: Excellent"),
+            MacMenuItem("Network Type: " + getCellularNetworkType()),
+            MacMenuItem(isSeparator = true),
+            MacMenuItem("Data Usage: 14.2 GB used this month")
+        ))
+    }
+
+    fun getCellularNetworkType(): String {
+        try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val activeNetwork = cm.activeNetwork ?: return "4G"
+            val capabilities = cm.getNetworkCapabilities(activeNetwork) ?: return "4G"
+            
+            if (capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                val tm = getSystemService(Context.TELEPHONY_SERVICE) as android.telephony.TelephonyManager
+                if (androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.READ_PHONE_STATE) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    val networkType = tm.networkType
+                    return when (networkType) {
+                        android.telephony.TelephonyManager.NETWORK_TYPE_NR -> "5G"
+                        android.telephony.TelephonyManager.NETWORK_TYPE_LTE -> "4G"
+                        else -> "4G"
+                    }
+                }
+            }
+        } catch (e: Exception) {}
+        return "5G"
     }
 
     private fun getWifiSSID(): String {
