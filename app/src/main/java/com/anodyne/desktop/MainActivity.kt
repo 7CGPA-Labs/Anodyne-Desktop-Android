@@ -392,6 +392,8 @@ class MainActivity : AppCompatActivity() {
     private var activeDropdownView: View? = null
     private var activeSubmenuView: View? = null
     private var activeTabNavDropdown: View? = null
+    private var lastTouchX = 0f
+    private var lastTouchY = 0f
 
     private var currentScale = 1.0f
 
@@ -502,6 +504,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (ev.action == MotionEvent.ACTION_DOWN) {
+            lastTouchX = ev.x
+            lastTouchY = ev.y
             val hasActiveMenu = activeDropdownView != null || activeSubmenuView != null || activeTabNavDropdown != null
             if (hasActiveMenu) {
                 var clickedInsideMenu = false
@@ -2416,8 +2420,13 @@ class MainActivity : AppCompatActivity() {
             isHorizontalScrollBarEnabled = true
             isVerticalScrollBarEnabled = true
 
-            // Disable long click to prevent mobile selection handle tropes
-            setOnLongClickListener { true }
+            setOnLongClickListener { v ->
+                val webView = v as? WebView
+                if (webView != null) {
+                    showWebPageContextMenu(webView, lastTouchX, lastTouchY)
+                }
+                true
+            }
 
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
@@ -3239,8 +3248,8 @@ class MainActivity : AppCompatActivity() {
         activeDropdownView?.let { menu ->
             val mx = menu.x
             val my = menu.y
-            val mw = menu.width
-            val mh = menu.height
+            val mw = if (menu.width > 0) menu.width.toFloat() else menu.measuredWidth.toFloat()
+            val mh = if (menu.height > 0) menu.height.toFloat() else menu.measuredHeight.toFloat()
             if (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh) {
                 hoveredInsideAnyMenu = true
                 nearAnyMenu = true
@@ -3259,8 +3268,8 @@ class MainActivity : AppCompatActivity() {
         activeSubmenuView?.let { sub ->
             val sx = sub.x
             val sy = sub.y
-            val sw = sub.width
-            val sh = sub.height
+            val sw = if (sub.width > 0) sub.width.toFloat() else sub.measuredWidth.toFloat()
+            val sh = if (sub.height > 0) sub.height.toFloat() else sub.measuredHeight.toFloat()
             if (cx >= sx && cx <= sx + sw && cy >= sy && cy <= sy + sh) {
                 hoveredInsideAnyMenu = true
                 nearAnyMenu = true
@@ -3279,8 +3288,8 @@ class MainActivity : AppCompatActivity() {
         activeTabNavDropdown?.let { menu ->
             val mx = menu.x
             val my = menu.y
-            val mw = menu.width
-            val mh = menu.height
+            val mw = if (menu.width > 0) menu.width.toFloat() else menu.measuredWidth.toFloat()
+            val mh = if (menu.height > 0) menu.height.toFloat() else menu.measuredHeight.toFloat()
             if (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh) {
                 hoveredInsideAnyMenu = true
                 nearAnyMenu = true
