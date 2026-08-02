@@ -1427,6 +1427,25 @@ class DesktopPresentation(
                     super.onPageFinished(view, url)
                     Log.d(TAG, "Casting WebView page finished loading: $url")
 
+                    if (url != null && url.startsWith("file:///android_asset/") && view != null) {
+                        try {
+                            val channel = view.createWebMessageChannel()
+                            val nativePort = channel[0]
+                            val webPort = channel[1]
+                            
+                            nativePort.setWebMessageCallback(object : android.webkit.WebMessagePort.WebMessageCallback() {
+                                override fun onMessage(port: android.webkit.WebMessagePort?, message: android.webkit.WebMessage?) {
+                                    val payload = message?.data ?: return
+                                    handleIpcMessage(view, payload)
+                                }
+                            })
+                            
+                            view.postWebMessage(android.webkit.WebMessage("init-ipc", arrayOf(webPort)), android.net.Uri.parse(url))
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error initializing WebMessagePort IPC channel in presentation", e)
+                        }
+                    }
+
                     val metrics = context.resources.displayMetrics
                     val width = metrics.widthPixels
 
@@ -1559,9 +1578,9 @@ class DesktopPresentation(
         newWebView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
-            allowFileAccess = true
-            allowContentAccess = true
-            allowUniversalAccessFromFileURLs = true
+            allowFileAccess = false
+            allowContentAccess = false
+            allowUniversalAccessFromFileURLs = false
             databaseEnabled = true
             loadWithOverviewMode = true
             useWideViewPort = true
@@ -1590,10 +1609,31 @@ class DesktopPresentation(
                 registerPwaMenus(url, appName, json)
             }
         )
-        newWebView.addJavascriptInterface(sysContext, "sysContext")
         newWebView.loadUrl(url)
 
         return newWebView
+    }
+
+    private fun handleIpcMessage(webView: WebView, payload: String) {
+        try {
+            val json = org.json.JSONObject(payload)
+            val msgId = json.optString("id", "")
+            val action = json.optString("action", "")
+            val args = json.optJSONArray("args")
+            
+            val result = (context as? MainActivity)?.executeIpcActionFromPresentation(action, args)
+            
+            val responseJs = """
+                window.dispatchEvent(new CustomEvent('anodyneIpcResponse', {
+                    detail: { id: '$msgId', result: ${result?.toString() ?: "null"} }
+                }));
+            """.trimIndent()
+            webView.post {
+                webView.evaluateJavascript(responseJs, null)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing IPC message in presentation: $payload", e)
+        }
     }
 
     fun openOrSwitchTab(id: String, url: String, title: String) {

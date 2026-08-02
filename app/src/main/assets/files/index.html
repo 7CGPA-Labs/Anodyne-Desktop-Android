@@ -617,6 +617,50 @@
         let navigationHistory = [];
         let historyIndex = -1;
 
+        (function() {
+            var messagePort = null;
+            var pendingRequests = [];
+            var callbackMap = {};
+
+            window.addEventListener('message', function(e) {
+                if (e.data === 'init-ipc' && e.ports && e.ports.length > 0) {
+                    messagePort = e.ports[0];
+                    messagePort.onmessage = function(event) {
+                        // Secure WebMessagePort messages
+                    };
+                    
+                    while (pendingRequests.length > 0) {
+                        var req = pendingRequests.shift();
+                        messagePort.postMessage(JSON.stringify(req));
+                    }
+                }
+            });
+
+            window.addEventListener('anodyneIpcResponse', function(e) {
+                var detail = e.detail;
+                if (detail && callbackMap[detail.id]) {
+                    callbackMap[detail.id](detail.result);
+                    delete callbackMap[detail.id];
+                }
+            });
+
+            window.anodyneIPC = {
+                send: function(action) {
+                    var args = Array.prototype.slice.call(arguments, 1);
+                    var id = 'msg_' + Math.random().toString(36).substr(2, 9);
+                    return new Promise(function(resolve) {
+                        callbackMap[id] = resolve;
+                        var req = { id: id, action: action, args: args };
+                        if (messagePort) {
+                            messagePort.postMessage(JSON.stringify(req));
+                        } else {
+                            pendingRequests.push(req);
+                        }
+                    });
+                }
+            };
+        })();
+
         document.addEventListener("DOMContentLoaded", function() {
             initializeAnodyneIPCBridge();
             initializeHashWorker();
@@ -629,40 +673,20 @@
 
         // 1. Host QWebChannel Synchronization
         function initializeAnodyneIPCBridge() {
-            if (typeof qt !== 'undefined' && qt.webChannelTransport) {
-                new QWebChannel(qt.webChannelTransport, function(channel) {
-                    window.sysContext = channel.objects.sysContext;
-                    sysContext.logWebEvent("Files PWA: Channel bridge synchronized.");
-
-                    sysContext.nativeJobProgressChanged.connect(function(jobId, progress) {
-                        if (activeJobId !== jobId) {
-                            activeJobId = jobId;
-                            document.getElementById("btn-pause").classList.remove("hidden");
-                            document.getElementById("btn-resume").classList.add("hidden");
-                        }
-                        updateFooterTaskBar(jobId, progress);
-                    });
-
-                    sysContext.nativeJobFinished.connect(function(jobId, success, message) {
-                        completeFooterTaskBar(jobId, success, message);
-                    });
-                });
-            } else if (window.sysContext) {
-                sysContext.logWebEvent("Files PWA: Android bridge synchronized.");
-                
-                window.onNativeJobProgressChanged = function(jobId, progress) {
-                    if (activeJobId !== jobId) {
-                        activeJobId = jobId;
-                        document.getElementById("btn-pause").classList.remove("hidden");
-                        document.getElementById("btn-resume").classList.add("hidden");
-                    }
-                    updateFooterTaskBar(jobId, progress);
-                };
-                
-                window.onNativeJobFinished = function(jobId, success, message) {
-                    completeFooterTaskBar(jobId, success, message);
-                };
-            }
+            window.anodyneIPC.send("logWebEvent", "Files PWA: WebMessagePort bridge synchronized.");
+            
+            window.onNativeJobProgressChanged = function(jobId, progress) {
+                if (activeJobId !== jobId) {
+                    activeJobId = jobId;
+                    document.getElementById("btn-pause").classList.remove("hidden");
+                    document.getElementById("btn-resume").classList.add("hidden");
+                }
+                updateFooterTaskBar(jobId, progress);
+            };
+            
+            window.onNativeJobFinished = function(jobId, success, message) {
+                completeFooterTaskBar(jobId, success, message);
+            };
         }
 
         // 2. Directory Navigation Engine (Mocking namespaces)
@@ -835,28 +859,22 @@
         }
 
         function controlJob(action) {
-            if (window.sysContext && activeJobId) {
-                sysContext.jobControl(activeJobId, action);
-                if (action === 'pause') {
-                    document.getElementById("btn-pause").classList.add("hidden");
-                    document.getElementById("btn-resume").classList.remove("hidden");
-                    document.getElementById("footer-status-msg").textContent = "Job paused.";
-                } else if (action === 'resume') {
-                    document.getElementById("btn-resume").classList.add("hidden");
-                    document.getElementById("btn-pause").classList.remove("hidden");
-                    document.getElementById("footer-status-msg").textContent = "Writing file blocks asynchronously...";
-                } else if (action === 'cancel') {
-                    document.getElementById("footer-status-msg").textContent = "Canceling job...";
-                }
+            window.anodyneIPC.send("jobControl", activeJobId, action);
+            if (action === 'pause') {
+                document.getElementById("btn-pause").classList.add("hidden");
+                document.getElementById("btn-resume").classList.remove("hidden");
+                document.getElementById("footer-status-msg").textContent = "Job paused.";
+            } else if (action === 'resume') {
+                document.getElementById("btn-resume").classList.add("hidden");
+                document.getElementById("btn-pause").classList.remove("hidden");
+                document.getElementById("footer-status-msg").textContent = "Writing file blocks asynchronously...";
+            } else if (action === 'cancel') {
+                document.getElementById("footer-status-msg").textContent = "Canceling job...";
             }
         }
 
         function triggerBackupJob() {
-            if (window.sysContext) {
-                sysContext.executeSystemCommand("files");
-            } else {
-                alert("Standalone Mode: QWebChannel not connected. Cannot start C++ worker.");
-            }
+            window.anodyneIPC.send("executeSystemCommand", "files");
         }
 
         function updateFooterTaskBar(jobId, progress) {

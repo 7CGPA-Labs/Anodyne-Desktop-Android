@@ -161,6 +161,190 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    fun executeIpcActionFromPresentation(action: String, args: org.json.JSONArray?): Any? {
+        return executeIpcAction(action, args)
+    }
+
+    private fun handleIpcMessage(webView: WebView, payload: String) {
+        try {
+            val json = org.json.JSONObject(payload)
+            val msgId = json.optString("id", "")
+            val action = json.optString("action", "")
+            val args = json.optJSONArray("args")
+            
+            val result = executeIpcAction(action, args)
+            
+            val responseJs = """
+                window.dispatchEvent(new CustomEvent('anodyneIpcResponse', {
+                    detail: { id: '$msgId', result: ${result?.toString() ?: "null"} }
+                }));
+            """.trimIndent()
+            runOnUiThread {
+                webView.evaluateJavascript(responseJs, null)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing IPC message: $payload", e)
+        }
+    }
+
+    private fun executeIpcAction(action: String, args: org.json.JSONArray?): Any? {
+        return when (action) {
+            "launchAppTab" -> {
+                val appId = args?.optString(0) ?: ""
+                val targetUrl = args?.optString(1) ?: ""
+                val title = args?.optString(2) ?: ""
+                runOnUiThread {
+                    openOrSwitchTab(appId, targetUrl, title)
+                }
+                "success"
+            }
+            "switchTab" -> {
+                val appId = args?.optString(0) ?: ""
+                runOnUiThread {
+                    openOrSwitchTab(appId, "", "")
+                }
+                "success"
+            }
+            "getAccessPin" -> {
+                getAccessPin()
+            }
+            "setOverscanPadding" -> {
+                val valInt = args?.optInt(0) ?: 0
+                runOnUiThread {
+                    setOverscanPaddingFromWeb(valInt)
+                }
+                "success"
+            }
+            "jobControl" -> {
+                val jobId = args?.optString(0) ?: ""
+                val actionStr = args?.optString(1) ?: ""
+                Log.i("PwaIpc", "Job control action: $actionStr on job: $jobId")
+                "success"
+            }
+            "executeSystemCommand" -> {
+                val cmd = args?.optString(0) ?: ""
+                Log.i("PwaIpc", "Execute system command: $cmd")
+                Thread {
+                    var progress = 0
+                    val jobId = "job_" + System.currentTimeMillis()
+                    while (progress <= 100) {
+                        Thread.sleep(150)
+                        val p = progress
+                        runOnUiThread {
+                            val tab = tabsList.firstOrNull { it.id == "files" }
+                            tab?.webView?.evaluateJavascript("if (window.onNativeJobProgressChanged) { window.onNativeJobProgressChanged('$jobId', $p); }", null)
+                        }
+                        progress += 10
+                    }
+                    runOnUiThread {
+                        val tab = tabsList.firstOrNull { it.id == "files" }
+                        tab?.webView?.evaluateJavascript("if (window.onNativeJobFinished) { window.onNativeJobFinished('$jobId', true, 'Backup Complete'); }", null)
+                    }
+                }.start()
+                "success"
+            }
+            "logWebEvent" -> {
+                val msg = args?.optString(0) ?: ""
+                Log.i("PwaWebEvent", msg)
+                "success"
+            }
+            "setUiScale" -> {
+                val scale = args?.optDouble(0)?.toFloat() ?: 1.0f
+                runOnUiThread {
+                    setUiScaleFromWeb(scale)
+                }
+                "success"
+            }
+            "setCursorStyle" -> {
+                val color = args?.optString(0) ?: "white"
+                val size = args?.optString(1) ?: "normal"
+                runOnUiThread {
+                    setCursorStyleFromWeb(color, size)
+                }
+                "success"
+            }
+            "setPointerSpeed" -> {
+                val speed = args?.optDouble(0)?.toFloat() ?: 1.0f
+                runOnUiThread {
+                    setPointerSpeedFromWeb(speed)
+                }
+                "success"
+            }
+            "setScrollDirectionNatural" -> {
+                val natural = args?.optBoolean(0) ?: true
+                runOnUiThread {
+                    setScrollDirectionNaturalFromWeb(natural)
+                }
+                "success"
+            }
+            "stopRemoteControlSession" -> {
+                runOnUiThread {
+                    stopRemoteControlSessionFromWeb()
+                }
+                "success"
+            }
+            "clearSystemStorage" -> {
+                runOnUiThread {
+                    clearAllCachedWebData()
+                }
+                "success"
+            }
+            "registerDynamicPwa" -> {
+                val appId = args?.optString(0) ?: ""
+                val title = args?.optString(1) ?: ""
+                val url = args?.optString(2) ?: ""
+                val category = args?.optString(3) ?: ""
+                registerDynamicPwaFromWeb(appId, title, url, category)
+                "success"
+            }
+            "registerDynamicExtension" -> {
+                val name = args?.optString(0) ?: ""
+                val script = args?.optString(1) ?: ""
+                registerDynamicExtensionFromWeb(name, script)
+                "success"
+            }
+            "unregisterDynamicPwa" -> {
+                val appId = args?.optString(0) ?: ""
+                unregisterDynamicPwaFromWeb(appId)
+                "success"
+            }
+            "unregisterDynamicExtension" -> {
+                val name = args?.optString(0) ?: ""
+                unregisterDynamicExtensionFromWeb(name)
+                "success"
+            }
+            "getDynamicPwasJson" -> {
+                val arr = org.json.JSONArray()
+                for (pwa in dynamicPwas) {
+                    val obj = org.json.JSONObject().apply {
+                        put("id", pwa.id)
+                        put("title", pwa.title)
+                        put("url", pwa.url)
+                        put("category", pwa.category)
+                    }
+                    arr.put(obj)
+                }
+                arr.toString()
+            }
+            "getDynamicExtensionsJson" -> {
+                val arr = org.json.JSONArray()
+                for (ext in dynamicExtensions) {
+                    val obj = org.json.JSONObject().apply {
+                        put("name", ext.name)
+                        put("script", ext.script)
+                    }
+                    arr.put(obj)
+                }
+                arr.toString()
+            }
+            "getGpsLocation" -> {
+                getGpsLocationFromNative()
+            }
+            else -> null
+        }
+    }
+
+
     private lateinit var workspaceContainer: FrameLayout
     private lateinit var rootLayout: LinearLayout
     private lateinit var tabScroll: HorizontalScrollView
@@ -744,21 +928,24 @@ class MainActivity : AppCompatActivity() {
         // Launch HTTP remote desktop server on port 8080
         remoteServer = DesktopRemoteServer(
             port = 8080,
-            getPin = { accessPin },
+            getPin = { if (isRemoteSharingActive) accessPin else "" },
             getActiveWebView = { getActiveWebView() },
             handleRemoteInput = { type, rx, ry ->
                 runOnUiThread {
                     val webView = getActiveWebView() ?: return@runOnUiThread
-                    val cx = rx * webView.width
-                    val cy = ry * webView.height
+                    
+                    // Clamping coordinate bounds securely (0.0f to 1.0f)
+                    val clampedRx = rx.coerceIn(0.0f, 1.0f)
+                    val clampedRy = ry.coerceIn(0.0f, 1.0f)
+                    
+                    val cx = clampedRx * webView.width
+                    val cy = clampedRy * webView.height
                     
                     if (type == "left_click" || type == "right_click") {
                         val isRight = (type == "right_click")
                         if (isRight) {
-                            webView.evaluateJavascript(
-                                "var el = document.elementFromPoint($cx, $cy); if (el) { el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, button: 2, clientX: $cx, clientY: $cy })); }",
-                                null
-                            )
+                            // Secure context menu invocation instead of JS injection
+                            showWebPageContextMenu(webView, cx, cy)
                         } else {
                             val downTime = SystemClock.uptimeMillis()
                             val eventTime = SystemClock.uptimeMillis()
@@ -2001,6 +2188,25 @@ class MainActivity : AppCompatActivity() {
                     super.onPageFinished(view, url)
                     Log.d(TAG, "Page finished loading: $url")
 
+                    if (url != null && url.startsWith("file:///android_asset/") && view != null) {
+                        try {
+                            val channel = view.createWebMessageChannel()
+                            val nativePort = channel[0]
+                            val webPort = channel[1]
+                            
+                            nativePort.setWebMessageCallback(object : android.webkit.WebMessagePort.WebMessageCallback() {
+                                override fun onMessage(port: android.webkit.WebMessagePort?, message: android.webkit.WebMessage?) {
+                                    val payload = message?.data ?: return
+                                    handleIpcMessage(view, payload)
+                                }
+                            })
+                            
+                            view.postWebMessage(android.webkit.WebMessage("init-ipc", arrayOf(webPort)), android.net.Uri.parse(url))
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error initializing WebMessagePort IPC channel", e)
+                        }
+                    }
+
                     val targetWidth = 1600
                     view?.evaluateJavascript(
                         """
@@ -2184,9 +2390,9 @@ class MainActivity : AppCompatActivity() {
         newWebView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
-            allowFileAccess = true
-            allowContentAccess = true
-            allowUniversalAccessFromFileURLs = true
+            allowFileAccess = false
+            allowContentAccess = false
+            allowUniversalAccessFromFileURLs = false
             databaseEnabled = true
             loadWithOverviewMode = true
             useWideViewPort = true

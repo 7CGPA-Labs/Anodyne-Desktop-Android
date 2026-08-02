@@ -822,6 +822,50 @@
     </div>
 
     <script>
+        (function() {
+            var messagePort = null;
+            var pendingRequests = [];
+            var callbackMap = {};
+
+            window.addEventListener('message', function(e) {
+                if (e.data === 'init-ipc' && e.ports && e.ports.length > 0) {
+                    messagePort = e.ports[0];
+                    messagePort.onmessage = function(event) {
+                        // Secure WebMessagePort messages
+                    };
+                    
+                    while (pendingRequests.length > 0) {
+                        var req = pendingRequests.shift();
+                        messagePort.postMessage(JSON.stringify(req));
+                    }
+                }
+            });
+
+            window.addEventListener('anodyneIpcResponse', function(e) {
+                var detail = e.detail;
+                if (detail && callbackMap[detail.id]) {
+                    callbackMap[detail.id](detail.result);
+                    delete callbackMap[detail.id];
+                }
+            });
+
+            window.anodyneIPC = {
+                send: function(action) {
+                    var args = Array.prototype.slice.call(arguments, 1);
+                    var id = 'msg_' + Math.random().toString(36).substr(2, 9);
+                    return new Promise(function(resolve) {
+                        callbackMap[id] = resolve;
+                        var req = { id: id, action: action, args: args };
+                        if (messagePort) {
+                            messagePort.postMessage(JSON.stringify(req));
+                        } else {
+                            pendingRequests.push(req);
+                        }
+                    });
+                }
+            };
+        })();
+
         document.addEventListener("DOMContentLoaded", function() {
             initializeAnodyneIPCBridge();
             setupSettingListeners();
@@ -830,19 +874,16 @@
         });
 
         function initializeAnodyneIPCBridge() {
-            if (window.sysContext) {
-                console.log("Bridge synchronized. Connected to Android host container.");
-                loadHostSystemStats();
-            } else {
-                console.log("Standalone Mode: Android host bridge not present. Running local simulated preferences.");
-            }
+            console.log("Bridge initialized using WebMessagePort IPC.");
+            loadHostSystemStats();
         }
 
         function loadHostSystemStats() {
-            if (window.sysContext && typeof window.sysContext.getAccessPin === 'function') {
-                const pin = window.sysContext.getAccessPin();
-                document.getElementById("remote-pin-val").textContent = pin;
-            }
+            window.anodyneIPC.send("getAccessPin").then(function(pin) {
+                if (pin) {
+                    document.getElementById("remote-pin-val").textContent = pin;
+                }
+            });
         }
 
         function switchCategory(cat) {
@@ -907,28 +948,20 @@
         function changeOverscan(val) {
             document.getElementById("overscan-val").textContent = val + "px";
             localStorage.setItem("overscan", val);
-            if (window.sysContext && typeof window.sysContext.setOverscanPadding === 'function') {
-                window.sysContext.setOverscanPadding(parseInt(val, 10));
-            }
+            window.anodyneIPC.send("setOverscanPadding", parseInt(val, 10));
         }
 
         function changeDisplayMode(mode) {
-            if (window.sysContext && typeof window.sysContext.logWebEvent === 'function') {
-                window.sysContext.logWebEvent(`Settings: Changed display mode to ${mode}`);
-            }
+            window.anodyneIPC.send("logWebEvent", `Settings: Changed display mode to ${mode}`);
         }
 
         function changeWallpaper(wallpaper) {
-            if (window.sysContext && typeof window.sysContext.logWebEvent === 'function') {
-                window.sysContext.logWebEvent(`Settings: Updated desktop wallpaper theme to ${wallpaper}`);
-            }
+            window.anodyneIPC.send("logWebEvent", `Settings: Updated desktop wallpaper theme to ${wallpaper}`);
         }
 
         function changeScale(scaleStr) {
             const scale = parseFloat(scaleStr);
-            if (window.sysContext && typeof window.sysContext.setUiScale === 'function') {
-                window.sysContext.setUiScale(scale);
-            }
+            window.anodyneIPC.send("setUiScale", scale);
         }
 
         function toggleHighContrast(checked) {
@@ -937,32 +970,24 @@
             } else {
                 document.body.classList.remove("high-contrast");
             }
-            if (window.sysContext && typeof window.sysContext.logWebEvent === 'function') {
-                window.sysContext.logWebEvent(`Settings: Toggle high contrast mode to ${checked}`);
-            }
+            window.anodyneIPC.send("logWebEvent", `Settings: Toggle high contrast mode to ${checked}`);
         }
 
         function changeCursorStyle() {
             const color = document.getElementById("cursor-color").value;
             const size = document.getElementById("cursor-size").value;
-            if (window.sysContext && typeof window.sysContext.setCursorStyle === 'function') {
-                window.sysContext.setCursorStyle(color, size);
-            }
+            window.anodyneIPC.send("setCursorStyle", color, size);
         }
 
         function changePointerSpeed(val) {
             const factor = (val / 10).toFixed(1);
             document.getElementById("pointer-speed-val").textContent = factor + "x";
             localStorage.setItem("pointerSpeed", val);
-            if (window.sysContext && typeof window.sysContext.setPointerSpeed === 'function') {
-                window.sysContext.setPointerSpeed(parseFloat(factor));
-            }
+            window.anodyneIPC.send("setPointerSpeed", parseFloat(factor));
         }
 
         function changeScrollDirection(natural) {
-            if (window.sysContext && typeof window.sysContext.setScrollDirectionNatural === 'function') {
-                window.sysContext.setScrollDirectionNatural(natural);
-            }
+            window.anodyneIPC.send("setScrollDirectionNatural", natural);
         }
 
         // Help triggers
@@ -978,80 +1003,78 @@
         }
 
         function disconnectRemoteSession() {
-            if (window.sysContext && typeof window.sysContext.stopRemoteControlSession === 'function') {
-                window.sysContext.stopRemoteControlSession();
-            }
+            window.anodyneIPC.send("stopRemoteControlSession");
             document.getElementById("remote-pin-row").style.display = "none";
             document.getElementById("disconnect-remote-btn").style.display = "none";
             document.getElementById("connection-status-label").textContent = "No active connections";
         }
 
         function triggerCacheCleanup() {
-            if (window.sysContext && typeof window.sysContext.clearSystemStorage === 'function') {
-                window.sysContext.clearSystemStorage();
-            } else {
-                alert("Cleanup Simulated: System temporary databases and cache cleared successfully!");
-            }
+            window.anodyneIPC.send("clearSystemStorage").then(function() {
+                alert("System temporary databases and cache cleared successfully!");
+            });
         }
 
         function loadDynamicAppsAndExtensions() {
-            if (!window.sysContext) return;
-            
             // Render PWAs list
             const pwasList = document.getElementById("installed-pwas-list");
             if (pwasList) {
                 pwasList.innerHTML = "";
-                try {
-                    const pwas = JSON.parse(window.sysContext.getDynamicPwasJson() || "[]");
-                    if (pwas.length === 0) {
-                        pwasList.innerHTML = '<div style="font-size:0.85rem; color:#64748b; padding:4px 14px;">No custom PWAs installed</div>';
-                    } else {
-                        pwas.forEach(pwa => {
-                            const row = document.createElement("div");
-                            row.className = "pref-row";
-                            row.style.borderBottom = "none";
-                            row.style.padding = "6px 14px";
-                            row.innerHTML = `
-                                <div class="pref-text">
-                                    <span class="pref-title">${pwa.title}</span>
-                                    <span class="pref-subtitle">${pwa.url} (${pwa.category})</span>
-                                </div>
-                                <div class="pref-control">
-                                    <button class="btn btn-danger" style="background:#dc2626; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;" onclick="uninstallPwa('${pwa.id}')">Uninstall</button>
-                                </div>
-                            `;
-                            pwasList.appendChild(row);
-                        });
-                    }
-                } catch(e) { console.error(e); }
+                window.anodyneIPC.send("getDynamicPwasJson").then(function(jsonStr) {
+                    try {
+                        const pwas = JSON.parse(jsonStr || "[]");
+                        if (pwas.length === 0) {
+                            pwasList.innerHTML = '<div style="font-size:0.85rem; color:#64748b; padding:4px 14px;">No custom PWAs installed</div>';
+                        } else {
+                            pwas.forEach(pwa => {
+                                const row = document.createElement("div");
+                                row.className = "pref-row";
+                                row.style.borderBottom = "none";
+                                row.style.padding = "6px 14px";
+                                row.innerHTML = `
+                                    <div class="pref-text">
+                                        <span class="pref-title">${pwa.title}</span>
+                                        <span class="pref-subtitle">${pwa.url} (${pwa.category})</span>
+                                    </div>
+                                    <div class="pref-control">
+                                        <button class="btn btn-danger" style="background:#dc2626; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;" onclick="uninstallPwa('${pwa.id}')">Uninstall</button>
+                                    </div>
+                                `;
+                                pwasList.appendChild(row);
+                            });
+                        }
+                    } catch(e) { console.error(e); }
+                });
             }
 
             // Render Extensions list
             const extsList = document.getElementById("installed-extensions-list");
             if (extsList) {
                 extsList.innerHTML = "";
-                try {
-                    const exts = JSON.parse(window.sysContext.getDynamicExtensionsJson() || "[]");
-                    if (exts.length === 0) {
-                        extsList.innerHTML = '<div style="font-size:0.85rem; color:#64748b; padding:4px 14px;">No custom extensions installed</div>';
-                    } else {
-                        exts.forEach(ext => {
-                            const row = document.createElement("div");
-                            row.className = "pref-row";
-                            row.style.borderBottom = "none";
-                            row.style.padding = "6px 14px";
-                            row.innerHTML = `
-                                <div class="pref-text">
-                                    <span class="pref-title">🧩 ${ext.name}</span>
-                                </div>
-                                <div class="pref-control">
-                                    <button class="btn btn-danger" style="background:#dc2626; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;" onclick="uninstallExtension('${ext.name}')">Remove</button>
-                                </div>
-                            `;
-                            extsList.appendChild(row);
-                        });
-                    }
-                } catch(e) { console.error(e); }
+                window.anodyneIPC.send("getDynamicExtensionsJson").then(function(jsonStr) {
+                    try {
+                        const exts = JSON.parse(jsonStr || "[]");
+                        if (exts.length === 0) {
+                            extsList.innerHTML = '<div style="font-size:0.85rem; color:#64748b; padding:4px 14px;">No custom extensions installed</div>';
+                        } else {
+                            exts.forEach(ext => {
+                                const row = document.createElement("div");
+                                row.className = "pref-row";
+                                row.style.borderBottom = "none";
+                                row.style.padding = "6px 14px";
+                                row.innerHTML = `
+                                    <div class="pref-text">
+                                        <span class="pref-title">🧩 ${ext.name}</span>
+                                    </div>
+                                    <div class="pref-control">
+                                        <button class="btn btn-danger" style="background:#dc2626; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;" onclick="uninstallExtension('${ext.name}')">Remove</button>
+                                    </div>
+                                `;
+                                extsList.appendChild(row);
+                            });
+                        }
+                    } catch(e) { console.error(e); }
+                });
             }
         }
 
@@ -1063,14 +1086,13 @@
                 alert("Please fill in both Name and URL.");
                 return;
             }
-            if (window.sysContext && typeof window.sysContext.registerDynamicPwa === 'function') {
-                const id = "pwa_" + Date.now();
-                window.sysContext.registerDynamicPwa(id, name, url, category);
+            const id = "pwa_" + Date.now();
+            window.anodyneIPC.send("registerDynamicPwa", id, name, url, category).then(function() {
                 document.getElementById("install-pwa-name").value = "";
                 document.getElementById("install-pwa-url").value = "";
                 loadDynamicAppsAndExtensions();
                 alert(`Successfully installed PWA: ${name}`);
-            }
+            });
         }
 
         function submitExtensionInstall() {
@@ -1080,30 +1102,27 @@
                 alert("Please fill in both Name and Script.");
                 return;
             }
-            if (window.sysContext && typeof window.sysContext.registerDynamicExtension === 'function') {
-                window.sysContext.registerDynamicExtension(name, script);
+            window.anodyneIPC.send("registerDynamicExtension", name, script).then(function() {
                 document.getElementById("install-ext-name").value = "";
                 document.getElementById("install-ext-script").value = "";
                 loadDynamicAppsAndExtensions();
                 alert(`Successfully installed Extension: ${name}`);
-            }
+            });
         }
 
         function uninstallPwa(id) {
             if (confirm("Are you sure you want to uninstall this PWA?")) {
-                if (window.sysContext && typeof window.sysContext.unregisterDynamicPwa === 'function') {
-                    window.sysContext.unregisterDynamicPwa(id);
+                window.anodyneIPC.send("unregisterDynamicPwa", id).then(function() {
                     loadDynamicAppsAndExtensions();
-                }
+                });
             }
         }
 
         function uninstallExtension(name) {
             if (confirm(`Are you sure you want to remove extension: ${name}?`)) {
-                if (window.sysContext && typeof window.sysContext.unregisterDynamicExtension === 'function') {
-                    window.sysContext.unregisterDynamicExtension(name);
+                window.anodyneIPC.send("unregisterDynamicExtension", name).then(function() {
                     loadDynamicAppsAndExtensions();
-                }
+                });
             }
         }
     </script>

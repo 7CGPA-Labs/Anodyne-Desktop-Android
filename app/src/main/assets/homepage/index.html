@@ -496,6 +496,50 @@
     </div>
 
     <script>
+        (function() {
+            var messagePort = null;
+            var pendingRequests = [];
+            var callbackMap = {};
+
+            window.addEventListener('message', function(e) {
+                if (e.data === 'init-ipc' && e.ports && e.ports.length > 0) {
+                    messagePort = e.ports[0];
+                    messagePort.onmessage = function(event) {
+                        // Secure WebMessagePort messages (if we post messages back via port)
+                    };
+                    
+                    while (pendingRequests.length > 0) {
+                        var req = pendingRequests.shift();
+                        messagePort.postMessage(JSON.stringify(req));
+                    }
+                }
+            });
+
+            window.addEventListener('anodyneIpcResponse', function(e) {
+                var detail = e.detail;
+                if (detail && callbackMap[detail.id]) {
+                    callbackMap[detail.id](detail.result);
+                    delete callbackMap[detail.id];
+                }
+            });
+
+            window.anodyneIPC = {
+                send: function(action) {
+                    var args = Array.prototype.slice.call(arguments, 1);
+                    var id = 'msg_' + Math.random().toString(36).substr(2, 9);
+                    return new Promise(function(resolve) {
+                        callbackMap[id] = resolve;
+                        var req = { id: id, action: action, args: args };
+                        if (messagePort) {
+                            messagePort.postMessage(JSON.stringify(req));
+                        } else {
+                            pendingRequests.push(req);
+                        }
+                    });
+                }
+            };
+        })();
+
         document.addEventListener("DOMContentLoaded", function() {
             initializeWallpaper();
             initializeClock();
@@ -587,9 +631,7 @@
                 url = "https://en.wikipedia.org/wiki/Special:Search?search=" + encodeURIComponent(query);
             }
 
-            if (window.sysContext) {
-                sysContext.launchAppTab("web_browser_" + Date.now(), url, "Search: " + query);
-            }
+            window.anodyneIPC.send("launchAppTab", "web_browser_" + Date.now(), url, "Search: " + query);
             queryInput.value = "";
         }
 
@@ -621,34 +663,20 @@
 
         // 6. Host IPC Bridge Link
         function initializeAnodyneIPCBridge() {
-            if (typeof qt !== 'undefined' && qt.webChannelTransport) {
-                new QWebChannel(qt.webChannelTransport, function(channel) {
-                    window.sysContext = channel.objects.sysContext;
-                    sysContext.logWebEvent("Dashboard UI successfully integrated with Hard Layer.");
+            window.anodyneIPC.send("logWebEvent", "Dashboard UI successfully integrated with WebMessagePort IPC.");
+            
+            window.onNativeJobProgressChanged = function(jobId, progress) {
+                updateVisualTaskBar(jobId, progress);
+            };
+            window.onNativeJobFinished = function(jobId, success, message) {
+                completeVisualTaskBar(jobId, message);
+            };
 
-                    sysContext.nativeJobProgressChanged.connect(function(jobId, progress) {
-                        updateVisualTaskBar(jobId, progress);
-                    });
-
-                    sysContext.nativeJobFinished.connect(function(jobId, success, message) {
-                        completeVisualTaskBar(jobId, message);
-                    });
-                });
-            } else if (window.sysContext) {
-                sysContext.logWebEvent("Dashboard UI successfully integrated with Android Hard Layer.");
-                
-                window.onNativeJobProgressChanged = function(jobId, progress) {
-                    updateVisualTaskBar(jobId, progress);
-                };
-                window.onNativeJobFinished = function(jobId, success, message) {
-                    completeVisualTaskBar(jobId, message);
-                };
-
-                if (typeof sysContext.getGpsLocation === 'function') {
-                    const loc = sysContext.getGpsLocation();
+            window.anodyneIPC.send("getGpsLocation").then(function(loc) {
+                if (loc) {
                     window.updateDashboardGpsLocation(loc);
                 }
-            }
+            });
         }
 
         window.updateDashboardGpsLocation = function(placeString) {
