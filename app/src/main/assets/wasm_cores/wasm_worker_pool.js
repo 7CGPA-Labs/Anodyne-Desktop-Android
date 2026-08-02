@@ -11,6 +11,10 @@ try {
     importScripts('guacamole_core.js');
     importScripts('webtorrent_core.js');
     importScripts('transformers_core.js');
+    importScripts('sqlite_core.js');
+    importScripts('pdfium_core.js');
+    importScripts('libarchive_core.js');
+    importScripts('imagemagick_core.js');
 } catch (e) {
     console.warn("Failed to dynamically importScript cores. Operating in standalone fallback mode.", e);
 }
@@ -24,6 +28,29 @@ const ffmpegInstance = typeof FFMpegCore !== 'undefined' ? new FFMpegCore() : nu
 const guacamoleInstance = typeof GuacamoleCore !== 'undefined' ? new GuacamoleCore() : null;
 const webTorrentInstance = typeof WebTorrentCore !== 'undefined' ? new WebTorrentCore() : null;
 const transformersInstance = typeof TransformersCore !== 'undefined' ? new TransformersCore() : null;
+
+// WASM C++ Core Module instances
+let sqliteModule = null;
+let sqliteInstance = null;
+let pdfiumModule = null;
+let pdfiumInstance = null;
+let libarchiveModule = null;
+let libarchiveInstance = null;
+let imagemagickModule = null;
+let imagemagickInstance = null;
+
+if (typeof createSqliteCoreModule !== 'undefined') {
+    createSqliteCoreModule().then(m => { sqliteModule = m; sqliteInstance = new m.SQLiteCore(); }).catch(e => console.error("WASM SQLite failed: ", e));
+}
+if (typeof createPdfiumCoreModule !== 'undefined') {
+    createPdfiumCoreModule().then(m => { pdfiumModule = m; pdfiumInstance = new m.PDFiumCore(); }).catch(e => console.error("WASM PDFium failed: ", e));
+}
+if (typeof createLibarchiveCoreModule !== 'undefined') {
+    createLibarchiveCoreModule().then(m => { libarchiveModule = m; libarchiveInstance = new m.LibarchiveCore(); }).catch(e => console.error("WASM Libarchive failed: ", e));
+}
+if (typeof createImageMagickCoreModule !== 'undefined') {
+    createImageMagickCoreModule().then(m => { imagemagickModule = m; imagemagickInstance = new m.ImageMagickCore(); }).catch(e => console.error("WASM ImageMagick failed: ", e));
+}
 
 self.onmessage = async function (e) {
     const { taskId, action, payload } = e.data;
@@ -83,14 +110,22 @@ self.onmessage = async function (e) {
     }
 };
 
-// --- SQLite Core Integration (with OPFS fallback) ---
+// --- SQLite Core Integration (WASM backend) ---
 async function handleSqlite(payload) {
-    console.log("SQLite WASM Core Executing: ", payload.query);
-    return {
-        rows: [{ id: 1, key: "theme", value: "glassmorphic" }],
-        affectedRows: 1,
-        message: "SQLite operation completed on OPFS container local storage."
-    };
+    if (!sqliteInstance) {
+        throw new Error("SQLite WASM Core is not initialized yet.");
+    }
+    console.log("SQLite WASM Core Executing: ", payload);
+    if (payload.op === 'insert') {
+        const id = sqliteInstance.insertRecord(payload.key || "", payload.value || "");
+        return { status: 'inserted', id, message: "Record inserted via C++ SQLiteCore." };
+    } else if (payload.op === 'query') {
+        const val = sqliteInstance.queryRecord(payload.key || "");
+        return { status: 'success', value: val, message: "Record queried via C++ SQLiteCore." };
+    } else {
+        const jsonStr = sqliteInstance.getAllRecordsJson();
+        return { status: 'success', records: JSON.parse(jsonStr), message: "All records fetched via C++ SQLiteCore." };
+    }
 }
 
 // --- Fallback Handlers ---
@@ -100,12 +135,26 @@ async function handleDuckDbFallback(payload) {
 }
 
 async function handlePdfium(payload) {
+    if (!pdfiumInstance) {
+        throw new Error("PDFium WASM Core is not initialized yet.");
+    }
     console.log("PDFium rendering page: ", payload.pageIndex);
+    if (payload.op === 'load') {
+        pdfiumInstance.loadDocument(payload.name || "untitled.pdf", payload.pages || 1);
+        return { status: 'loaded', pages: pdfiumInstance.getPageCount(), documentName: pdfiumInstance.getDocumentName() };
+    }
+    const width = payload.width || 800;
+    const height = payload.height || 1100;
+    const rgbaString = pdfiumInstance.renderPageToRgba(payload.pageIndex || 0, width, height);
+    const pixels = new Uint8ClampedArray(rgbaString.length);
+    for (let i = 0; i < rgbaString.length; i++) {
+        pixels[i] = rgbaString.charCodeAt(i);
+    }
     return {
-        width: 800,
-        height: 1100,
-        pixels: new Uint8ClampedArray(800 * 1100 * 4),
-        message: "PDF Page rendered successfully."
+        width: width,
+        height: height,
+        pixels: pixels,
+        message: "PDF Page rendered successfully by WASM PDFiumCore."
     };
 }
 
@@ -114,12 +163,33 @@ async function handleOcrFallback(payload) {
 }
 
 async function handleFileCompression(payload) {
-    console.log("Libarchive compressing/decompressing payload...");
-    return {
-        archiveSize: 1024 * 50,
-        filesCount: 3,
-        message: "Archive operation completed successfully."
-    };
+    if (!libarchiveInstance || !libarchiveModule) {
+        throw new Error("Libarchive WASM Core is not initialized yet.");
+    }
+    console.log("Libarchive compressing/decompressing payload via WASM...");
+    if (payload.op === 'extract') {
+        const fileList = libarchiveInstance.extractArchive(payload.archiveData || "");
+        const parsedFiles = JSON.parse(fileList);
+        return {
+            archiveSize: (payload.archiveData || "").length,
+            filesCount: parsedFiles.length,
+            files: parsedFiles,
+            message: "Archive extracted successfully by WASM LibarchiveCore."
+        };
+    } else {
+        const fileNames = payload.fileNames || ["document.pdf", "image.png", "notes.txt"];
+        const vectorStr = new libarchiveModule.VectorString();
+        for (const name of fileNames) {
+            vectorStr.push_back(name);
+        }
+        const archiveData = libarchiveInstance.compressFiles(vectorStr);
+        vectorStr.delete();
+        return {
+            archiveSize: archiveData.length,
+            filesCount: fileNames.length,
+            message: "Files compressed successfully by WASM LibarchiveCore."
+        };
+    }
 }
 
 async function handleFfmpegFallback(payload) {
@@ -127,11 +197,19 @@ async function handleFfmpegFallback(payload) {
 }
 
 async function handleImageMagick(payload) {
+    if (!imagemagickInstance) {
+        throw new Error("ImageMagick WASM Core is not initialized yet.");
+    }
     console.log("ImageMagick resizing to: ", payload.width, "x", payload.height);
+    const targetW = payload.width || 100;
+    const targetH = payload.height || 100;
+    const outputBuffer = imagemagickInstance.resizeImage(payload.buffer || "MOCK_RAW_BUFFER", targetW, targetH);
     return {
-        width: payload.width,
-        height: payload.height,
-        status: "resized"
+        width: targetW,
+        height: targetH,
+        status: "resized",
+        bufferSize: outputBuffer.length,
+        message: "Image resized successfully by WASM ImageMagickCore."
     };
 }
 

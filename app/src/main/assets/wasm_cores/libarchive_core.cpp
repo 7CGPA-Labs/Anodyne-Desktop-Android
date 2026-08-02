@@ -25,6 +25,7 @@ public:
 
 #ifdef __EMSCRIPTEN__
 EMSCRIPTEN_BINDINGS(libarchive_core) {
+    emscripten::register_vector<std::string>("VectorString");
     emscripten::class_<LibarchiveCore>("LibarchiveCore")
         .constructor()
         .function("extractArchive", &LibarchiveCore::extractArchive)
