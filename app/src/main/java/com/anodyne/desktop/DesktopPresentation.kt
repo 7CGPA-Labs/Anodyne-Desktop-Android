@@ -102,6 +102,8 @@ class DesktopPresentation(
     // Custom dropdown layouts inside workspaceContainer
     private var activeDropdownView: View? = null
     private var activeSubmenuView: View? = null
+    private var lastTouchX = 0f
+    private var lastTouchY = 0f
 
     private var currentScale = 1.0f
     private var isRemoteSharingActive = false
@@ -890,7 +892,14 @@ class DesktopPresentation(
     }
 
     // View-based Dynamic Custom Menu inside Presentation workspaceContainer
-    private fun showMacMenu(anchorView: View, menuItems: List<MacMenuItem>, isSubMenu: Boolean = false, subMenuX: Float = 0f, subMenuY: Float = 0f) {
+    private fun showMacMenu(
+        anchorView: View, 
+        menuItems: List<MacMenuItem>, 
+        isSubMenu: Boolean = false, 
+        subMenuX: Float = 0f, 
+        subMenuY: Float = 0f,
+        useDirectCoords: Boolean = false
+    ) {
         if (!isSubMenu) {
             dismissActiveDropdown()
         }
@@ -976,6 +985,10 @@ class DesktopPresentation(
                 popupView.x = subMenuX
                 popupView.y = subMenuY
                 activeSubmenuView = popupView
+            } else if (useDirectCoords) {
+                popupView.x = subMenuX
+                popupView.y = subMenuY
+                activeDropdownView = popupView
             } else {
                 val location = IntArray(2)
                 anchorView.getLocationOnScreen(location)
@@ -1241,39 +1254,53 @@ class DesktopPresentation(
             val cy = cursorY
             val offset = topBar.height + tabScroll.height + dpToPx(2)
 
-            if (activeDropdownView != null) {
-                val menu = activeDropdownView!!
-                val mx = menu.x
-                val my = menu.y
-                val mw = menu.width
-                val mh = menu.height
+            val hasActiveMenu = activeDropdownView != null || activeSubmenuView != null
+            if (hasActiveMenu) {
+                var clickedInside = false
+                var targetMenu: View? = null
                 
-                val inMain = (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh)
-                
-                var inSub = false
                 activeSubmenuView?.let { sub ->
                     val sx = sub.x
                     val sy = sub.y
-                    val sw = sub.width
-                    val sh = sub.height
-                    inSub = (cx >= sx && cx <= sx + sw && cy >= sy && cy <= sy + sh)
+                    val sw = if (sub.width > 0) sub.width.toFloat() else sub.measuredWidth.toFloat()
+                    val sh = if (sub.height > 0) sub.height.toFloat() else sub.measuredHeight.toFloat()
+                    if (cx >= sx && cx <= sx + sw && cy >= sy && cy <= sy + sh) {
+                        clickedInside = true
+                        targetMenu = sub
+                    }
                 }
-                
-                if (!inMain && !inSub) {
+
+                if (!clickedInside) {
+                    activeDropdownView?.let { menu ->
+                        val mx = menu.x
+                        val my = menu.y
+                        val mw = if (menu.width > 0) menu.width.toFloat() else menu.measuredWidth.toFloat()
+                        val mh = if (menu.height > 0) menu.height.toFloat() else menu.measuredHeight.toFloat()
+                        if (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh) {
+                            clickedInside = true
+                            targetMenu = menu
+                        }
+                    }
+                }
+
+                if (!clickedInside) {
                     dismissActiveDropdown()
                     return@post
                 } else {
-                    if (!isRightClick) {
+                    if (!isRightClick && targetMenu != null) {
+                        val localX = cx - targetMenu!!.x
+                        val localY = cy - targetMenu!!.y
+                        
                         val downTime = SystemClock.uptimeMillis()
                         val eventTime = SystemClock.uptimeMillis()
-                        val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, cy, 0).apply {
+                        val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, localX, localY, 0).apply {
                             source = InputDevice.SOURCE_MOUSE
                         }
-                        val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, cy, 0).apply {
+                        val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, localX, localY, 0).apply {
                             source = InputDevice.SOURCE_MOUSE
                         }
-                        workspaceContainer.dispatchTouchEvent(downEvent)
-                        workspaceContainer.dispatchTouchEvent(upEvent)
+                        targetMenu!!.dispatchTouchEvent(downEvent)
+                        targetMenu!!.dispatchTouchEvent(upEvent)
                         downEvent.recycle()
                         upEvent.recycle()
                     }
@@ -1320,40 +1347,107 @@ class DesktopPresentation(
 
     private fun showWebPageContextMenu(webView: WebView, x: Float, y: Float) {
         dismissActiveDropdown()
-        val pageUrl = webView.url ?: ""
-        val pageTitle = webView.title ?: "Web App"
+        
+        webView.evaluateJavascript("(function() { return window.getSelection().toString(); })()") { selection ->
+            val rawSelection = selection?.trim() ?: ""
+            val selectedText = if (rawSelection.startsWith("\"") && rawSelection.endsWith("\"") && rawSelection.length >= 2) {
+                rawSelection.substring(1, rawSelection.length - 1)
+            } else {
+                rawSelection
+            }.trim()
 
-        val menuItems = mutableListOf<MacMenuItem>()
-        menuItems.add(MacMenuItem("Reload") { webView.reload() })
-        
-        if (webView.canGoBack()) {
-            menuItems.add(MacMenuItem("Back") { webView.goBack() })
-        }
-        if (webView.canGoForward()) {
-            menuItems.add(MacMenuItem("Forward") { webView.goForward() })
-        }
-        
-        menuItems.add(MacMenuItem(isSeparator = true))
-        
-        val isSystemPage = pageUrl.startsWith("file://") || pageUrl.isEmpty()
-        val isAlreadyInstalled = (context as? MainActivity)?.dynamicPwas?.any { it.url == pageUrl } == true
-        
-        if (!isSystemPage && !isAlreadyInstalled) {
-            menuItems.add(MacMenuItem("Install Page as PWA") {
-                AlertDialog.Builder(context)
-                    .setTitle("Install Application")
-                    .setMessage("Do you want to install \"$pageTitle\" to your App Drawer?")
-                    .setPositiveButton("Install") { _, _ ->
-                        val id = "pwa_" + System.currentTimeMillis()
-                        (context as? MainActivity)?.registerDynamicPwaFromWeb(id, pageTitle, pageUrl, "Internet")
-                        android.widget.Toast.makeText(context, "\"$pageTitle\" has been installed to the App Drawer!", android.widget.Toast.LENGTH_SHORT).show()
+            val pageUrl = webView.url ?: ""
+            val pageTitle = webView.title ?: "Web App"
+            val hitTest = webView.hitTestResult
+            val hitType = hitTest.type
+            val hitExtra = hitTest.extra ?: ""
+
+            val menuItems = mutableListOf<MacMenuItem>()
+
+            if (selectedText.isNotEmpty()) {
+                menuItems.add(MacMenuItem("📋 Copy") {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("Selected Text", selectedText)
+                    clipboard.setPrimaryClip(clip)
+                    android.widget.Toast.makeText(context, "Text copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                })
+                val searchLabel = if (selectedText.length > 20) selectedText.take(17) + "..." else selectedText
+                menuItems.add(MacMenuItem("🔍 Search Google for \"$searchLabel\"") {
+                    try {
+                        val searchUrl = "https://www.google.com/search?q=" + java.net.URLEncoder.encode(selectedText, "UTF-8")
+                        openOrSwitchTab("search_" + System.currentTimeMillis(), searchUrl, "Google Search")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Search URL encode error", e)
                     }
-                    .setNegativeButton("Cancel", null)
-                    .show()
-            })
-        }
+                })
+                menuItems.add(MacMenuItem("🌐 Translate") {
+                    try {
+                        val transUrl = "https://translate.google.com/?sl=auto&text=" + java.net.URLEncoder.encode(selectedText, "UTF-8")
+                        openOrSwitchTab("trans_" + System.currentTimeMillis(), transUrl, "Translate")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Translate URL encode error", e)
+                    }
+                })
+                menuItems.add(MacMenuItem(isSeparator = true))
+            } else if (hitType == WebView.HitTestResult.SRC_ANCHOR_TYPE || hitType == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
+                menuItems.add(MacMenuItem("🔗 Open Link in New Tab") {
+                    openOrSwitchTab("link_" + System.currentTimeMillis(), hitExtra, "New Tab")
+                })
+                menuItems.add(MacMenuItem("📋 Copy Link Address") {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("Link Address", hitExtra)
+                    clipboard.setPrimaryClip(clip)
+                    android.widget.Toast.makeText(context, "Link address copied", android.widget.Toast.LENGTH_SHORT).show()
+                })
+                menuItems.add(MacMenuItem(isSeparator = true))
+            } else if (hitType == WebView.HitTestResult.IMAGE_TYPE) {
+                menuItems.add(MacMenuItem("🖼️ Open Image in New Tab") {
+                    openOrSwitchTab("img_" + System.currentTimeMillis(), hitExtra, "Image")
+                })
+                menuItems.add(MacMenuItem("📋 Copy Image Link") {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("Image Link", hitExtra)
+                    clipboard.setPrimaryClip(clip)
+                    android.widget.Toast.makeText(context, "Image link copied", android.widget.Toast.LENGTH_SHORT).show()
+                })
+                menuItems.add(MacMenuItem(isSeparator = true))
+            }
 
-        showMacMenu(webView, menuItems, isSubMenu = true, subMenuX = x, subMenuY = y)
+            menuItems.add(MacMenuItem("🔄 Reload") { webView.reload() })
+            if (webView.canGoBack()) {
+                menuItems.add(MacMenuItem("◀ Back") { webView.goBack() })
+            }
+            if (webView.canGoForward()) {
+                menuItems.add(MacMenuItem("▶ Forward") { webView.goForward() })
+            }
+            
+            menuItems.add(MacMenuItem(isSeparator = true))
+            menuItems.add(MacMenuItem("🖨️ Print Page") {
+                (context as? MainActivity)?.printActiveTab()
+            })
+
+            val isSystemPage = pageUrl.startsWith("file://") || pageUrl.isEmpty()
+            val isAlreadyInstalled = (context as? MainActivity)?.dynamicPwas?.any { it.url == pageUrl } == true
+            
+            if (!isSystemPage && !isAlreadyInstalled) {
+                menuItems.add(MacMenuItem("📥 Install Page as PWA") {
+                    AlertDialog.Builder(context)
+                        .setTitle("Install Application")
+                        .setMessage("Do you want to install \"$pageTitle\" to your App Drawer?")
+                        .setPositiveButton("Install") { _, _ ->
+                            val id = "pwa_" + System.currentTimeMillis()
+                            (context as? MainActivity)?.registerDynamicPwaFromWeb(id, pageTitle, pageUrl, "Internet")
+                            android.widget.Toast.makeText(context, "\"$pageTitle\" has been installed to the App Drawer!", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                })
+            }
+
+            clockHandler.post {
+                showMacMenu(webView, menuItems, isSubMenu = false, subMenuX = x, subMenuY = y, useDirectCoords = true)
+            }
+        }
     }
 
     fun scrollPresentation(dy: Float) {
@@ -1448,7 +1542,24 @@ class DesktopPresentation(
     }
 
     private fun createTabWebView(url: String): WebView {
-        val newWebView = WebView(context).apply {
+        val newWebView = object : WebView(context) {
+            override fun startActionMode(callback: android.view.ActionMode.Callback?, type: Int): android.view.ActionMode? {
+                showWebPageContextMenu(this, cursorX, cursorY)
+                val wrapped = object : android.view.ActionMode.Callback2() {
+                    override fun onCreateActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?): Boolean {
+                        menu?.clear()
+                        return true
+                    }
+                    override fun onPrepareActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?): Boolean {
+                        menu?.clear()
+                        return false
+                    }
+                    override fun onActionItemClicked(mode: android.view.ActionMode?, item: android.view.MenuItem?): Boolean = false
+                    override fun onDestroyActionMode(mode: android.view.ActionMode?) {}
+                }
+                return super.startActionMode(wrapped, type)
+            }
+        }.apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
@@ -1462,8 +1573,20 @@ class DesktopPresentation(
             isHorizontalScrollBarEnabled = true
             isVerticalScrollBarEnabled = true
 
-            // Disable long click to prevent mobile selection handle tropes
-            setOnLongClickListener { true }
+            setOnLongClickListener { v ->
+                val webView = v as? WebView
+                if (webView != null) {
+                    val type = webView.hitTestResult.type
+                    if (type == WebView.HitTestResult.UNKNOWN_TYPE || type == WebView.HitTestResult.EDIT_TEXT_TYPE) {
+                        false
+                    } else {
+                        showWebPageContextMenu(webView, cursorX, cursorY)
+                        true
+                    }
+                } else {
+                    true
+                }
+            }
 
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
