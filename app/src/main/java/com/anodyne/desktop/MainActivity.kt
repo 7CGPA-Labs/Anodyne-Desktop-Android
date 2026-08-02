@@ -1007,7 +1007,43 @@ class MainActivity : AppCompatActivity() {
             elevation = elev
         }
 
-        val menuItems = listOf(
+        // LXQt Style Search Input at the top
+        val searchLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(padLeft, padTop, padRight, padBottom)
+        }
+
+        val searchIcon = TextView(this).apply {
+            text = "🔍 "
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 9.5f * scale
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        searchLayout.addView(searchIcon)
+
+        val itemsContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val allApps = listOf(
+            MacMenuItem("Spotlight Search") { toggleSpotlightSearch() },
+            MacMenuItem("Web Browser") { openOrSwitchTab("web_" + System.currentTimeMillis(), "https://www.google.com", "Google") },
+            MacMenuItem("Files (Nautilus)") { openOrSwitchTab("files", "file:///android_asset/files/index.html", "Files") },
+            MacMenuItem("Settings (GNOME)") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") },
+            MacMenuItem("System Settings") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") },
+            MacMenuItem("Restart Shell") { recreate() },
+            MacMenuItem("Shut Down") { finish() }
+        )
+
+        val categories = listOf(
             MacMenuItem("Accessories  ▶"),
             MacMenuItem("Internet  ▶"),
             MacMenuItem("System Tools  ▶"),
@@ -1017,83 +1053,131 @@ class MainActivity : AppCompatActivity() {
             MacMenuItem("Shut Down") { finish() }
         )
 
-        for (item in menuItems) {
-            if (item.isSeparator) {
-                val sep = View(this).apply {
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        1
-                    ).apply {
-                        setMargins(0, dpToPx((3 * scale).toInt()), 0, dpToPx((3 * scale).toInt()))
-                    }
-                    setBackgroundColor(Color.parseColor("#2a2a3a"))
-                }
-                popupView.addView(sep)
-            } else {
-                val row = TextView(this).apply {
-                    text = item.title
-                    setTextColor(Color.parseColor("#e2e8f0"))
-                    textSize = textSz
-                    setPadding(padLeft, padTop, padRight, padBottom)
-                    gravity = Gravity.CENTER_VERTICAL
-                    val hoverBg = android.graphics.drawable.StateListDrawable().apply {
-                        addState(intArrayOf(android.R.attr.state_pressed), android.graphics.drawable.ColorDrawable(Color.parseColor("#3584e4")))
-                        addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-                    }
-                    background = hoverBg
-                    isClickable = true
-
-                    setOnHoverListener { v, event ->
-                        val tv = v as? TextView
-                        if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
-                            tv?.setBackgroundColor(Color.parseColor("#3584e4"))
-                            tv?.setTextColor(Color.WHITE)
-                        } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
-                            tv?.setBackgroundColor(Color.TRANSPARENT)
-                            tv?.setTextColor(Color.parseColor("#e2e8f0"))
+        fun drawRows(items: List<MacMenuItem>) {
+            itemsContainer.removeAllViews()
+            for (item in items) {
+                if (item.isSeparator) {
+                    val sep = View(this).apply {
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            1
+                        ).apply {
+                            setMargins(0, dpToPx((3 * scale).toInt()), 0, dpToPx((3 * scale).toInt()))
                         }
-                        false
+                        setBackgroundColor(Color.parseColor("#2a2a3a"))
                     }
-                    
-                    setOnClickListener {
-                        if (item.title.contains("▶")) {
-                            val subItems = when {
-                                item.title.startsWith("Accessories") -> listOf(
-                                    MacMenuItem("Spotlight Search") { toggleSpotlightSearch() }
-                                )
-                                item.title.startsWith("Internet") -> listOf(
-                                    MacMenuItem("Web Browser") { openOrSwitchTab("web_" + System.currentTimeMillis(), "https://www.google.com", "Google") }
-                                )
-                                item.title.startsWith("System Tools") -> listOf(
-                                    MacMenuItem("Files (Nautilus)") { openOrSwitchTab("files", "file:///android_asset/files/index.html", "Files") },
-                                    MacMenuItem("Settings (GNOME)") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") }
-                                )
-                                item.title.startsWith("Preferences") -> listOf(
-                                    MacMenuItem("System Settings") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") }
-                                )
-                                else -> emptyList()
+                    itemsContainer.addView(sep)
+                } else {
+                    val row = TextView(this).apply {
+                        text = item.title
+                        setTextColor(Color.parseColor("#e2e8f0"))
+                        textSize = textSz
+                        setPadding(padLeft, padTop, padRight, padBottom)
+                        gravity = Gravity.CENTER_VERTICAL
+                        background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+                        isClickable = true
+
+                        setOnHoverListener { v, event ->
+                            val tv = v as? TextView
+                            if (event.action == MotionEvent.ACTION_HOVER_ENTER || event.action == MotionEvent.ACTION_HOVER_MOVE) {
+                                tv?.setBackgroundColor(Color.parseColor("#3584e4"))
+                                tv?.setTextColor(Color.WHITE)
+
+                                if (item.title.contains("▶")) {
+                                    val subItems = when {
+                                        item.title.startsWith("Accessories") -> listOf(
+                                            MacMenuItem("Spotlight Search") { toggleSpotlightSearch() }
+                                        )
+                                        item.title.startsWith("Internet") -> listOf(
+                                            MacMenuItem("Web Browser") { openOrSwitchTab("web_" + System.currentTimeMillis(), "https://www.google.com", "Google") }
+                                        )
+                                        item.title.startsWith("System Tools") -> listOf(
+                                            MacMenuItem("Files (Nautilus)") { openOrSwitchTab("files", "file:///android_asset/files/index.html", "Files") },
+                                            MacMenuItem("Settings (GNOME)") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") }
+                                        )
+                                        item.title.startsWith("Preferences") -> listOf(
+                                            MacMenuItem("System Settings") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") }
+                                        )
+                                        else -> emptyList()
+                                    }
+
+                                    val loc = IntArray(2)
+                                    v.getLocationOnScreen(loc)
+                                    val mainX = activeDropdownView?.x ?: 0f
+                                    val mainW = activeDropdownView?.width ?: 0
+
+                                    activeSubmenuView?.let { sub ->
+                                        workspaceContainer.removeView(sub)
+                                        activeSubmenuView = null
+                                    }
+
+                                    showMacMenu(v, subItems, isSubMenu = true, subMenuX = mainX + mainW + dpToPx(4), subMenuY = loc[1].toFloat())
+                                } else {
+                                    activeSubmenuView?.let { sub ->
+                                        workspaceContainer.removeView(sub)
+                                        activeSubmenuView = null
+                                    }
+                                }
+                            } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
+                                tv?.setBackgroundColor(Color.TRANSPARENT)
+                                tv?.setTextColor(Color.parseColor("#e2e8f0"))
                             }
-                            
-                            val loc = IntArray(2)
-                            this.getLocationOnScreen(loc)
-                            val mainX = activeDropdownView?.x ?: 0f
-                            val mainW = activeDropdownView?.width ?: 0
-                            
-                            activeSubmenuView?.let { sub ->
-                                workspaceContainer.removeView(sub)
-                                activeSubmenuView = null
-                            }
-                            
-                            showMacMenu(this, subItems, isSubMenu = true, subMenuX = mainX + mainW + dpToPx(4), subMenuY = loc[1].toFloat())
-                        } else {
+                            false
+                        }
+
+                        setOnClickListener {
                             dismissActiveDropdown()
                             item.action?.invoke()
                         }
                     }
+                    itemsContainer.addView(row)
                 }
-                popupView.addView(row)
             }
         }
+
+        drawRows(categories)
+
+        val searchInput = EditText(this).apply {
+            hint = "Search..."
+            setHintTextColor(Color.parseColor("#475569"))
+            setTextColor(Color.WHITE)
+            textSize = 9.5f * scale
+            background = null
+            layoutParams = LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f
+            )
+            maxLines = 1
+            isSingleLine = true
+
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    val query = s?.toString()?.trim()?.lowercase() ?: ""
+                    if (query.isEmpty()) {
+                        drawRows(categories)
+                    } else {
+                        activeSubmenuView?.let { sub ->
+                            workspaceContainer.removeView(sub)
+                            activeSubmenuView = null
+                        }
+                        val filtered = allApps.filter { it.title.lowercase().contains(query) }
+                        drawRows(filtered)
+                    }
+                }
+                override fun afterTextChanged(s: android.text.Editable?) {}
+            })
+        }
+        searchLayout.addView(searchInput)
+        popupView.addView(searchLayout)
+
+        val searchSep = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
+            setBackgroundColor(Color.parseColor("#2a2a3a"))
+        }
+        popupView.addView(searchSep)
+        popupView.addView(itemsContainer)
 
         popupView.layoutParams = FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
