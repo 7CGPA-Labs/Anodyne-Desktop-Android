@@ -500,6 +500,60 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.action == MotionEvent.ACTION_DOWN) {
+            val hasActiveMenu = activeDropdownView != null || activeSubmenuView != null || activeTabNavDropdown != null
+            if (hasActiveMenu) {
+                var clickedInsideMenu = false
+                val x = ev.rawX
+                val y = ev.rawY
+                val location = IntArray(2)
+
+                activeDropdownView?.let { menu ->
+                    menu.getLocationOnScreen(location)
+                    val mx = location[0].toFloat()
+                    val my = location[1].toFloat()
+                    val mw = menu.width.toFloat()
+                    val mh = menu.height.toFloat()
+                    if (x >= mx && x <= mx + mw && y >= my && y <= my + mh) {
+                        clickedInsideMenu = true
+                    }
+                }
+
+                if (!clickedInsideMenu) {
+                    activeSubmenuView?.let { sub ->
+                        sub.getLocationOnScreen(location)
+                        val sx = location[0].toFloat()
+                        val sy = location[1].toFloat()
+                        val sw = sub.width.toFloat()
+                        val sh = sub.height.toFloat()
+                        if (x >= sx && x <= sx + sw && y >= sy && y <= sy + sh) {
+                            clickedInsideMenu = true
+                        }
+                    }
+                }
+
+                if (!clickedInsideMenu) {
+                    activeTabNavDropdown?.let { tabDropdown ->
+                        tabDropdown.getLocationOnScreen(location)
+                        val tx = location[0].toFloat()
+                        val ty = location[1].toFloat()
+                        val tw = tabDropdown.width.toFloat()
+                        val th = tabDropdown.height.toFloat()
+                        if (x >= tx && x <= tx + tw && y >= ty && y <= ty + th) {
+                            clickedInsideMenu = true
+                        }
+                    }
+                }
+
+                if (!clickedInsideMenu) {
+                    dismissActiveDropdown()
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         loadDynamicRegistry()
@@ -2249,7 +2303,12 @@ class MainActivity : AppCompatActivity() {
                                 }
                             })
                             
-                            view.postWebMessage(android.webkit.WebMessage("init-ipc", arrayOf(webPort)), android.net.Uri.parse(url))
+                            val targetOrigin = if (url.startsWith("file://")) {
+                                android.net.Uri.parse("*")
+                            } else {
+                                android.net.Uri.parse(url)
+                            }
+                            view.postWebMessage(android.webkit.WebMessage("init-ipc", arrayOf(webPort)), targetOrigin)
                         } catch (e: Exception) {
                             Log.e(TAG, "Error initializing WebMessagePort IPC channel", e)
                         }
@@ -3041,8 +3100,7 @@ class MainActivity : AppCompatActivity() {
         val cy = cursorY
         
         // Dispatch hover events to custom menu overlays to trigger button hover colors dynamically
-        if (activeDropdownView != null) {
-            val menu = activeDropdownView!!
+        activeDropdownView?.let { menu ->
             val mx = menu.x
             val my = menu.y
             val mw = menu.width
@@ -3050,10 +3108,10 @@ class MainActivity : AppCompatActivity() {
             if (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh) {
                 val downTime = SystemClock.uptimeMillis()
                 val eventTime = SystemClock.uptimeMillis()
-                val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, cy, 0).apply {
+                val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx - mx, cy - my, 0).apply {
                     source = InputDevice.SOURCE_MOUSE
                 }
-                workspaceContainer.dispatchGenericMotionEvent(hoverEvent)
+                menu.dispatchGenericMotionEvent(hoverEvent)
                 hoverEvent.recycle()
                 return
             }
@@ -3066,10 +3124,26 @@ class MainActivity : AppCompatActivity() {
             if (cx >= sx && cx <= sx + sw && cy >= sy && cy <= sy + sh) {
                 val downTime = SystemClock.uptimeMillis()
                 val eventTime = SystemClock.uptimeMillis()
-                val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, cy, 0).apply {
+                val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx - sx, cy - sy, 0).apply {
                     source = InputDevice.SOURCE_MOUSE
                 }
-                workspaceContainer.dispatchGenericMotionEvent(hoverEvent)
+                sub.dispatchGenericMotionEvent(hoverEvent)
+                hoverEvent.recycle()
+                return
+            }
+        }
+        activeTabNavDropdown?.let { menu ->
+            val mx = menu.x
+            val my = menu.y
+            val mw = menu.width
+            val mh = menu.height
+            if (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh) {
+                val downTime = SystemClock.uptimeMillis()
+                val eventTime = SystemClock.uptimeMillis()
+                val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx - mx, cy - my, 0).apply {
+                    source = InputDevice.SOURCE_MOUSE
+                }
+                menu.dispatchGenericMotionEvent(hoverEvent)
                 hoverEvent.recycle()
                 return
             }
@@ -3104,41 +3178,67 @@ class MainActivity : AppCompatActivity() {
         val offset = topBar.height + tabScroll.height + dpToPx(2)
 
         // Intercept dropdown outside taps
-        if (activeDropdownView != null) {
-            val menu = activeDropdownView!!
-            val mx = menu.x
-            val my = menu.y
-            val mw = menu.width
-            val mh = menu.height
+        val hasActiveMenu = activeDropdownView != null || activeSubmenuView != null || activeTabNavDropdown != null
+        if (hasActiveMenu) {
+            var clickedInside = false
             
-            val inMain = (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh)
-            
-            var inSub = false
-            activeSubmenuView?.let { sub ->
-                val sx = sub.x
-                val sy = sub.y
-                val sw = sub.width
-                val sh = sub.height
-                inSub = (cx >= sx && cx <= sx + sw && cy >= sy && cy <= sy + sh)
+            activeDropdownView?.let { menu ->
+                val mx = menu.x
+                val my = menu.y
+                val mw = menu.width
+                val mh = menu.height
+                if (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh) {
+                    clickedInside = true
+                }
             }
             
-            if (!inMain && !inSub) {
+            if (!clickedInside) {
+                activeSubmenuView?.let { sub ->
+                    val sx = sub.x
+                    val sy = sub.y
+                    val sw = sub.width
+                    val sh = sub.height
+                    if (cx >= sx && cx <= sx + sw && cy >= sy && cy <= sy + sh) {
+                        clickedInside = true
+                    }
+                }
+            }
+            
+            if (!clickedInside) {
+                activeTabNavDropdown?.let { menu ->
+                    val mx = menu.x
+                    val my = menu.y
+                    val mw = menu.width
+                    val mh = menu.height
+                    if (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh) {
+                        clickedInside = true
+                    }
+                }
+            }
+            
+            if (!clickedInside) {
                 dismissActiveDropdown()
                 return
             } else {
                 if (!isRightClick) {
-                    val downTime = SystemClock.uptimeMillis()
-                    val eventTime = SystemClock.uptimeMillis()
-                    val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, cy, 0).apply {
-                        source = InputDevice.SOURCE_MOUSE
+                    val targetMenu = activeDropdownView ?: activeSubmenuView ?: activeTabNavDropdown
+                    if (targetMenu != null) {
+                        val localX = cx - targetMenu.x
+                        val localY = cy - targetMenu.y
+                        
+                        val downTime = SystemClock.uptimeMillis()
+                        val eventTime = SystemClock.uptimeMillis()
+                        val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, localX, localY, 0).apply {
+                            source = InputDevice.SOURCE_MOUSE
+                        }
+                        val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, localX, localY, 0).apply {
+                            source = InputDevice.SOURCE_MOUSE
+                        }
+                        targetMenu.dispatchTouchEvent(downEvent)
+                        targetMenu.dispatchTouchEvent(upEvent)
+                        downEvent.recycle()
+                        upEvent.recycle()
                     }
-                    val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, cy, 0).apply {
-                        source = InputDevice.SOURCE_MOUSE
-                    }
-                    workspaceContainer.dispatchTouchEvent(downEvent)
-                    workspaceContainer.dispatchTouchEvent(upEvent)
-                    downEvent.recycle()
-                    upEvent.recycle()
                 }
                 return
             }

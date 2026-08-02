@@ -447,22 +447,7 @@
             word-break: break-all;
         }
 
-        .hash-value-area {
-            width: 100%;
-            height: 60px;
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: #8ff0a4 !important;
-            font-family: monospace;
-            font-size: 0.8rem;
-            padding: 8px;
-            border-radius: 6px;
-            resize: none;
-            box-sizing: border-box;
-            outline: none;
-            word-break: break-all;
-            margin-top: 4px;
-        }
+
 
         @keyframes pulse-glow {
             0% {
@@ -562,12 +547,12 @@
 
         <!-- File Details & Analysis Sidebar -->
         <aside class="details-sidebar" id="details-sidebar">
-            <div class="section-title">Properties & Hash</div>
+            <div class="section-title">Properties</div>
             
             <!-- Empty State / Dropzone -->
             <div id="details-empty-state" class="details-empty-state">
-                <div class="drop-icon">⚡</div>
-                <p class="drop-label">Select a file from the explorer grid or drag a local file here to analyze metrics and compute hashes.</p>
+                <div class="drop-icon">📁</div>
+                <p class="drop-label">Select a file from the explorer grid or drag a local file here to analyze metrics.</p>
             </div>
 
             <!-- Details Content -->
@@ -591,24 +576,12 @@
                     </div>
                 </div>
 
-                <!-- Hash Controls -->
-                <div class="hash-section">
-                    <button class="btn btn-primary" id="btn-calculate-hash" onclick="calculateFileHash()" style="width: 100%; justify-content: center; margin-top: 15px;">
-                        ⚡ Calculate Checksum (WASM)
-                    </button>
-                    <div id="hash-status" class="hash-status-msg" style="margin-top: 10px; font-size: 0.9em; color: #ffcc00; text-align: center;">Initializing WASM engine...</div>
-                    <div id="hash-result-box" class="hash-result-box hidden" style="margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;">
-                        <div class="hash-label" style="font-size: 0.85em; color: #a0a0a0; margin-bottom: 6px;">SHA-256 Checksum:</div>
-                        <textarea id="hash-value" class="hash-value-area" readonly style="width: 100%; height: 60px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: #4caf50; font-family: monospace; font-size: 0.85em; padding: 6px; border-radius: 4px; resize: none; box-sizing: border-box; outline: none; word-break: break-all;"></textarea>
-                        <div class="hash-duration" style="font-size: 0.8em; color: #a0a0a0; margin-top: 4px; text-align: right;">Duration: <span id="hash-duration-val" style="font-weight: bold; color: white;">--</span> ms</div>
-                    </div>
-                </div>
+
             </div>
         </aside>
     </div>
 
     <script>
-        let hashWorker = null;
         let selectedFileData = null;
         let selectedFileName = "";
         let currentDirectoryKey = "";
@@ -663,7 +636,6 @@
 
         document.addEventListener("DOMContentLoaded", function() {
             initializeAnodyneIPCBridge();
-            initializeHashWorker();
             initializeDragAndDrop();
             // Default to system root view
             navigateTo('system-root');
@@ -903,42 +875,7 @@
             }, 3000);
         }
 
-        function initializeHashWorker() {
-            const statusEl = document.getElementById("hash-status");
-            if (!statusEl) return;
-            
-            try {
-                hashWorker = new Worker("hash_worker.js");
-                hashWorker.onmessage = function(event) {
-                    const data = event.data;
-                    if (data.status === "ready") {
-                        statusEl.textContent = "✓ WASM engine active";
-                        statusEl.style.color = "#4caf50";
-                    } else if (data.status === "success") {
-                        statusEl.textContent = "✓ Calculation complete";
-                        statusEl.style.color = "#4caf50";
-                        
-                        document.getElementById("hash-result-box").classList.remove("hidden");
-                        document.getElementById("hash-value").value = data.hash;
-                        document.getElementById("hash-duration-val").textContent = data.duration;
-                        document.getElementById("btn-calculate-hash").disabled = false;
-                    } else if (data.status === "error") {
-                        statusEl.textContent = "❌ Initialization error";
-                        statusEl.style.color = "#f44336";
-                        console.error(data.error);
-                    }
-                };
-                hashWorker.onerror = function(err) {
-                    statusEl.textContent = "❌ Load error";
-                    statusEl.style.color = "#f44336";
-                    console.error(err);
-                };
-            } catch (e) {
-                statusEl.textContent = "❌ Web Workers unsupported";
-                statusEl.style.color = "#f44336";
-                console.error(e);
-            }
-        }
+
 
         function selectVirtualFile(name, type, size, perms) {
             document.getElementById("details-empty-state").classList.add("hidden");
@@ -948,30 +885,6 @@
             document.getElementById("detail-type").textContent = type;
             document.getElementById("detail-size").textContent = size;
             document.getElementById("detail-perms").firstElementChild.textContent = perms;
-            
-            document.getElementById("hash-result-box").classList.add("hidden");
-            document.getElementById("hash-value").value = "";
-            
-            const calcBtn = document.getElementById("btn-calculate-hash");
-            const statusEl = document.getElementById("hash-status");
-            
-            if (type === "Directory") {
-                calcBtn.disabled = true;
-                calcBtn.style.opacity = 0.5;
-                statusEl.textContent = "Cannot compute checksum for directory";
-                statusEl.style.color = "#a0a0a0";
-                selectedFileData = null;
-            } else {
-                calcBtn.disabled = false;
-                calcBtn.style.opacity = 1;
-                statusEl.textContent = "Ready to hash virtual payload";
-                statusEl.style.color = "#ffcc00";
-                
-                const mockContent = `Anodyne OS Mock File Payload for: ${name} (${size}) permissions: ${perms}`;
-                const encoder = new TextEncoder();
-                selectedFileData = encoder.encode(mockContent).buffer;
-                selectedFileName = name;
-            }
         }
 
         function initializeDragAndDrop() {
@@ -1018,41 +931,6 @@
             
             document.getElementById("detail-size").textContent = sizeStr;
             document.getElementById("detail-perms").firstElementChild.textContent = "-rw-r--r-- (local)";
-            
-            document.getElementById("hash-result-box").classList.add("hidden");
-            document.getElementById("hash-value").value = "";
-            
-            const calcBtn = document.getElementById("btn-calculate-hash");
-            const statusEl = document.getElementById("hash-status");
-            
-            calcBtn.disabled = true;
-            statusEl.textContent = "Reading local file...";
-            statusEl.style.color = "#ffcc00";
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                selectedFileData = e.target.result;
-                selectedFileName = file.name;
-                calcBtn.disabled = false;
-                statusEl.textContent = "Ready to hash local file";
-                statusEl.style.color = "#ffcc00";
-            };
-            reader.onerror = function() {
-                statusEl.textContent = "❌ Failed to read file";
-                statusEl.style.color = "#f44336";
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-        function calculateFileHash() {
-            if (!hashWorker || !selectedFileData) return;
-            
-            const statusEl = document.getElementById("hash-status");
-            statusEl.textContent = "⚡ Computing SHA-256 in background worker...";
-            statusEl.style.color = "#ffcc00";
-            document.getElementById("btn-calculate-hash").disabled = true;
-            
-            hashWorker.postMessage({ fileData: selectedFileData });
         }
     </script>
 </body>
