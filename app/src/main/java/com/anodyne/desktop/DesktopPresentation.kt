@@ -552,7 +552,8 @@ class DesktopPresentation(
                         if (item.title.contains("▶")) {
                             val subItems = when {
                                 item.title.startsWith("Accessories") -> listOf(
-                                    MacMenuItem("Spotlight Search") { toggleSpotlightSearch() }
+                                    MacMenuItem("Spotlight Search") { toggleSpotlightSearch() },
+                                    MacMenuItem("Notepad") { openOrSwitchTab("notepad", "file:///android_asset/notepad/index.html", "Notepad") }
                                 )
                                 item.title.startsWith("Internet") -> listOf(
                                     MacMenuItem("Web Browser") { openOrSwitchTab("web_" + System.currentTimeMillis(), "https://www.google.com", "Google") }

@@ -1461,6 +1461,7 @@ class MainActivity : AppCompatActivity() {
 
         val allApps = mutableListOf<MacMenuItem>().apply {
             add(MacMenuItem("Spotlight Search") { toggleSpotlightSearch() })
+            add(MacMenuItem("Notepad") { openOrSwitchTab("notepad", "file:///android_asset/notepad/index.html", "Notepad") })
             add(MacMenuItem("Web Browser") { openOrSwitchTab("web_" + System.currentTimeMillis(), "https://www.google.com", "Google") })
             add(MacMenuItem("Files (Nautilus)") { openOrSwitchTab("files", "file:///android_asset/files/index.html", "Files") })
             add(MacMenuItem("Settings (GNOME)") { openOrSwitchTab("settings", "file:///android_asset/settings/index.html", "Settings") })
@@ -1529,7 +1530,8 @@ class MainActivity : AppCompatActivity() {
                                     val subItems = when {
                                         item.title.startsWith("Accessories") -> {
                                             val list = mutableListOf(
-                                                MacMenuItem("Spotlight Search") { toggleSpotlightSearch() }
+                                                MacMenuItem("Spotlight Search") { toggleSpotlightSearch() },
+                                                MacMenuItem("Notepad") { openOrSwitchTab("notepad", "file:///android_asset/notepad/index.html", "Notepad") }
                                             )
                                             for (pwa in dynamicPwas.filter { it.category.equals("Accessories", ignoreCase = true) }) {
                                                 list.add(MacMenuItem(pwa.title) { openOrSwitchTab(pwa.id, pwa.url, pwa.title) })

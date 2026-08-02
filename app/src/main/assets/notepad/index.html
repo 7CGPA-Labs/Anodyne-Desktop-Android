@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notepad</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        body {
+            background-color: #0c0c14;
+            color: #f8fafc;
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Sidebar styling */
+        .sidebar {
+            width: 260px;
+            background-color: #12121a;
+            border-right: 1px solid #2a2a3a;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid #2a2a3a;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .app-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #f8fafc;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .new-btn {
+            background-color: #3584e4;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 13px;
+            width: 100%;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .new-btn:hover {
+            background-color: #2a6ec2;
+        }
+
+        .search-box {
+            background-color: #1e1e2e;
+            border: 1px solid #2a2a3a;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+            width: 100%;
+        }
+
+        .notes-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .note-item {
+            padding: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-bottom: 6px;
+            transition: background-color 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .note-item:hover {
+            background-color: #1e1e2e;
+        }
+
+        .note-item.active {
+            background-color: #1e1e2e;
+            border-color: #3584e4;
+        }
+
+        .note-item-title {
+            font-weight: bold;
+            font-size: 13.5px;
+            color: #f1f5f9;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 4px;
+        }
+
+        .note-item-preview {
+            font-size: 11.5px;
+            color: #94a3b8;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Editor Area */
+        .editor {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            background-color: #0c0c14;
+        }
+
+        .toolbar {
+            padding: 14px 20px;
+            background-color: #12121a;
+            border-bottom: 1px solid #2a2a3a;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .toolbar-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            background-color: #1e1e2e;
+            color: #e2e8f0;
+            border: 1px solid #2a2a3a;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12.5px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            background-color: #2a2a3a;
+            color: white;
+        }
+
+        .btn-danger {
+            background-color: #451a1a;
+            border-color: #7f2d2d;
+            color: #f87171;
+        }
+
+        .btn-danger:hover {
+            background-color: #7f2d2d;
+            color: white;
+        }
+
+        .editor-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            gap: 16px;
+        }
+
+        .note-title-input {
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            outline: none;
+            width: 100%;
+            border-bottom: 1px solid transparent;
+            padding-bottom: 8px;
+            transition: border-bottom-color 0.2s;
+        }
+
+        .note-title-input:focus {
+            border-bottom-color: #2a2a3a;
+        }
+
+        .note-body-textarea {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #e2e8f0;
+            font-size: 14.5px;
+            line-height: 1.6;
+            outline: none;
+            resize: none;
+            width: 100%;
+        }
+
+        /* Print styles */
+        @media print {
+            .sidebar, .toolbar {
+                display: none !important;
+            }
+            body {
+                background-color: white !important;
+                color: black !important;
+            }
+            .note-title-input {
+                color: black !important;
+                border-bottom: 2px solid black !important;
+            }
+            .note-body-textarea {
+                color: black !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar with Notes List -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <div class="app-title">📝 Notepad</div>
+            <button class="new-btn" onclick="createNewNote()">➕ New Note</button>
+            <input type="text" class="search-box" placeholder="Search notes..." oninput="filterNotes(this.value)">
+        </div>
+        <div class="notes-list" id="notesList">
+            <!-- Dynamic note items will be placed here -->
+        </div>
+    </div>
+
+    <!-- Active Editor Screen -->
+    <div class="editor">
+        <div class="toolbar">
+            <div class="toolbar-actions">
+                <button class="btn" onclick="saveNote()">💾 Save Note</button>
+                <button class="btn" onclick="exportNote()">📥 Export as TXT</button>
+                <button class="btn" onclick="printNote()">🖨️ Print Note</button>
+            </div>
+            <div>
+                <button class="btn btn-danger" onclick="deleteNote()">🗑️ Delete</button>
+            </div>
+        </div>
+
+        <div class="editor-content">
+            <input type="text" id="noteTitle" class="note-title-input" placeholder="Untitled Note" oninput="autoSave()">
+            <textarea id="noteBody" class="note-body-textarea" placeholder="Start typing here..." oninput="autoSave()"></textarea>
+        </div>
+    </div>
+
+    <script>
+        let notes = [];
+        let activeNoteId = null;
+        let saveTimeout = null;
+
+        // Load notes from local storage on load
+        window.addEventListener('load', () => {
+            const stored = localStorage.getItem('anodyne_notes');
+            if (stored) {
+                try {
+                    notes = JSON.parse(stored);
+                } catch(e) {
+                    notes = [];
+                }
+            }
+            
+            if (notes.length === 0) {
+                // Prepopulate a sample welcome note
+                notes.push({
+                    id: 'welcome',
+                    title: 'Welcome to Notepad',
+                    body: 'This is a premium, simple Notepad app designed specifically for Anodyne OS.\n\nKey features:\n1. Auto-saving as you type.\n2. Export notes to standard Text files.\n3. Directly print notes.\n4. Clean and spacious dark mode design.',
+                    updated: Date.now()
+                });
+            }
+            
+            activeNoteId = notes[0].id;
+            renderNotesList();
+            loadActiveNote();
+        });
+
+        function renderNotesList(filterQuery = "") {
+            const listContainer = document.getElementById('notesList');
+            listContainer.innerHTML = '';
+            
+            const filtered = notes.filter(n => 
+                n.title.toLowerCase().includes(filterQuery.toLowerCase()) || 
+                n.body.toLowerCase().includes(filterQuery.toLowerCase())
+            );
+
+            // Sort by last updated
+            filtered.sort((a, b) => b.updated - a.updated);
+
+            filtered.forEach(note => {
+                const item = document.createElement('div');
+                item.className = `note-item ${note.id === activeNoteId ? 'active' : ''}`;
+                item.onclick = () => selectNote(note.id);
+
+                const title = document.createElement('div');
+                title.className = 'note-item-title';
+                title.textContent = note.title || 'Untitled Note';
+
+                const preview = document.createElement('div');
+                preview.className = 'note-item-preview';
+                preview.textContent = note.body || 'Empty';
+
+                item.appendChild(title);
+                item.appendChild(preview);
+                listContainer.appendChild(item);
+            });
+        }
+
+        function loadActiveNote() {
+            const note = notes.find(n => n.id === activeNoteId);
+            if (note) {
+                document.getElementById('noteTitle').value = note.title;
+                document.getElementById('noteBody').value = note.body;
+            } else {
+                document.getElementById('noteTitle').value = '';
+                document.getElementById('noteBody').value = '';
+            }
+        }
+
+        function selectNote(id) {
+            activeNoteId = id;
+            loadActiveNote();
+            renderNotesList();
+        }
+
+        function createNewNote() {
+            const newId = 'note_' + Date.now();
+            const newNote = {
+                id: newId,
+                title: 'New Note',
+                body: '',
+                updated: Date.now()
+            };
+            notes.unshift(newNote);
+            activeNoteId = newId;
+            saveNotesToStorage();
+            loadActiveNote();
+            renderNotesList();
+        }
+
+        function deleteNote() {
+            if (confirm("Are you sure you want to delete this note?")) {
+                notes = notes.filter(n => n.id !== activeNoteId);
+                saveNotesToStorage();
+                
+                if (notes.length > 0) {
+                    activeNoteId = notes[0].id;
+                } else {
+                    createNewNote();
+                }
+                
+                loadActiveNote();
+                renderNotesList();
+            }
+        }
+
+        function saveNotesToStorage() {
+            localStorage.setItem('anodyne_notes', JSON.stringify(notes));
+        }
+
+        function autoSave() {
+            if (saveTimeout) clearTimeout(saveTimeout);
+            
+            saveTimeout = setTimeout(() => {
+                const note = notes.find(n => n.id === activeNoteId);
+                if (note) {
+                    note.title = document.getElementById('noteTitle').value;
+                    note.body = document.getElementById('noteBody').value;
+                    note.updated = Date.now();
+                    saveNotesToStorage();
+                    renderNotesList();
+                }
+            }, 300);
+        }
+
+        function saveNote() {
+            const note = notes.find(n => n.id === activeNoteId);
+            if (note) {
+                note.title = document.getElementById('noteTitle').value;
+                note.body = document.getElementById('noteBody').value;
+                note.updated = Date.now();
+                saveNotesToStorage();
+                renderNotesList();
+                
+                // Trigger HTML5 Web Notification to show dynamic saved notification!
+                if (window.Notification) {
+                    new Notification("Notepad", {
+                        body: `"${note.title || 'Untitled Note'}" has been saved successfully.`
+                    });
+                }
+            }
+        }
+
+        function filterNotes(query) {
+            renderNotesList(query);
+        }
+
+        function printNote() {
+            // Check if sysContext printing is available, otherwise fall back to browser print
+            if (window.sysContext && typeof window.sysContext.printDocument === 'function') {
+                window.sysContext.printDocument();
+            } else {
+                window.print();
+            }
+        }
+
+        function exportNote() {
+            const title = document.getElementById('noteTitle').value || 'Untitled';
+            const body = document.getElementById('noteBody').value;
+            
+            const blob = new Blob([body], { type: 'text/plain;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `${title}.txt`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
