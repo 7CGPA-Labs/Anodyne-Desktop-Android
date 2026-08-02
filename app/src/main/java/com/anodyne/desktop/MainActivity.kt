@@ -87,11 +87,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var spotlightInput: EditText
     private lateinit var spotlightBtn: TextView
 
-    // Floating Virtual Keyboard
-    private lateinit var virtualKeyboardPanel: LinearLayout
-    private var isShiftEnabled = false
-    private val rowViews = mutableListOf<TextView>()
-
     // Cursor & Touchpad UI elements (Covering the entire screen)
     private lateinit var touchpadOverlay: TouchpadLayout
     private lateinit var cursorView: ImageView
@@ -107,7 +102,8 @@ class MainActivity : AppCompatActivity() {
     private val accessPin = (100000..999999).random().toString()
     private var remoteServer: DesktopRemoteServer? = null
 
-    // Top Bar UI elements
+    // Tooltip & Top Bar UI elements
+    private lateinit var tooltipView: TextView
     private lateinit var topBar: LinearLayout
     private lateinit var logoText: TextView
     private lateinit var anodyneMenu: TextView
@@ -289,6 +285,7 @@ class MainActivity : AppCompatActivity() {
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             setOnClickListener { showLxqtAppDrawer(this) }
         }
+        registerTooltipHover(logoText) { "App Menu" }
         leftContainer.addView(logoText)
 
         // Active GPS/Camera/Mic indicator container
@@ -324,10 +321,15 @@ class MainActivity : AppCompatActivity() {
             isFocusable = true
             
             setOnHoverListener { v, event ->
-                if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
-                    v.setBackgroundColor(Color.parseColor("#2a2a35"))
-                } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
-                    v.setBackgroundColor(Color.TRANSPARENT)
+                when (event.action) {
+                    MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE -> {
+                        v.setBackgroundColor(Color.parseColor("#2a2a35"))
+                        showTooltip("Calendar & Notifications", cursorX, cursorY)
+                    }
+                    MotionEvent.ACTION_HOVER_EXIT -> {
+                        v.setBackgroundColor(Color.TRANSPARENT)
+                        hideTooltip()
+                    }
                 }
                 false
             }
@@ -366,24 +368,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
         rightContainer.addView(modeToggle)
-
-        // Manual Floating Virtual Keyboard Toggle Icon
-        val keyboardToggle = TextView(this).apply {
-            text = "⌨️"
-            setTextColor(Color.parseColor("#94a3b8"))
-            textSize = 8.5f
-            setPadding(dpToPx(4), 0, dpToPx(2), 0)
-            setOnClickListener {
-                if (virtualKeyboardPanel.visibility == View.VISIBLE) {
-                    hideVirtualKeyboard()
-                    presentation?.hideVirtualKeyboard()
-                } else {
-                    showVirtualKeyboard()
-                    presentation?.showVirtualKeyboard()
-                }
-            }
-        }
-        rightContainer.addView(keyboardToggle)
 
         // macOS Spotlight Button Icon
         spotlightBtn = TextView(this).apply {
@@ -453,6 +437,15 @@ class MainActivity : AppCompatActivity() {
         }
         rightContainer.addView(getHelpToggle)
         topBar.addView(rightContainer)
+
+        registerTooltipHover(modeToggle) { "Input Mode: " + (if (isTrackpadMode) "Trackpad" else "Direct Touch") }
+        registerTooltipHover(spotlightBtn) { "Spotlight Search" }
+        registerTooltipHover(downloadsTrayText) { "Active Downloads" }
+        registerTooltipHover(wifiTextView) { "Connected to: " + getWifiSSID() }
+        registerTooltipHover(batteryTextView) { "Battery: " + getBatteryPct() + "% (" + getBatteryPowerSource() + ")" }
+        registerTooltipHover(scaleToggle) { "Scale: " + (currentScale * 100).toInt() + "%" }
+        registerTooltipHover(getHelpToggle) { "Get Remote Help PIN" }
+        registerTooltipHover(pinLabel) { "Your Tech Support Connection PIN" }
 
         rootLayout.addView(topBar)
 
@@ -579,11 +572,28 @@ class MainActivity : AppCompatActivity() {
         }
         workspaceContainer.addView(cursorView)
 
+        // Initialize Floating Tooltip View
+        tooltipView = TextView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4))
+            val bg = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#f912121a"))
+                setStroke(1, Color.parseColor("#3a3a4e"))
+                cornerRadius = dpToPx(6).toFloat()
+            }
+            background = bg
+            setTextColor(Color.WHITE)
+            textSize = 8.5f
+            visibility = View.GONE
+            elevation = dpToPx(20).toFloat()
+        }
+        workspaceContainer.addView(tooltipView)
+
         // 5. Spotlight Search overlay
         setupSpotlightSearch()
-
-        // 6. Miniature Draggable Keyboard Overlay
-        setupVirtualKeyboard()
 
         setContentView(workspaceContainer)
 
@@ -826,6 +836,13 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Error geocoding GPS location coordinates", e)
             lastKnownPlace = "San Jose, California, Washington, D.C. (United States)"
+            runOnUiThread {
+                for (tab in tabsList) {
+                    if (tab.id == "home") {
+                        tab.webView.evaluateJavascript("if (window.updateDashboardGpsLocation) { window.updateDashboardGpsLocation('$lastKnownPlace'); }", null)
+                    }
+                }
+            }
         }
     }
 
@@ -923,6 +940,15 @@ class MainActivity : AppCompatActivity() {
             if (keyCode == android.view.KeyEvent.KEYCODE_ESCAPE) {
                 if (isRemoteSharingActive) {
                     stopRemoteSharing()
+                    return true
+                }
+            }
+
+            // 8. Alt + [1-9] to switch directly to tabs 1-9
+            if (event.isAltPressed && keyCode in android.view.KeyEvent.KEYCODE_1..android.view.KeyEvent.KEYCODE_9) {
+                val targetIndex = keyCode - android.view.KeyEvent.KEYCODE_1
+                if (targetIndex in tabsList.indices) {
+                    switchTab(targetIndex)
                     return true
                 }
             }
@@ -1033,11 +1059,7 @@ class MainActivity : AppCompatActivity() {
                         if (item.title.contains("▶")) {
                             val subItems = when {
                                 item.title.startsWith("Accessories") -> listOf(
-                                    MacMenuItem("Spotlight Search") { toggleSpotlightSearch() },
-                                    MacMenuItem("Floating Keyboard") { 
-                                        showVirtualKeyboard()
-                                        presentation?.showVirtualKeyboard()
-                                    }
+                                    MacMenuItem("Spotlight Search") { toggleSpotlightSearch() }
                                 )
                                 item.title.startsWith("Internet") -> listOf(
                                     MacMenuItem("Web Browser") { openOrSwitchTab("web_" + System.currentTimeMillis(), "https://www.google.com", "Google") }
@@ -1085,6 +1107,11 @@ class MainActivity : AppCompatActivity() {
             popupView.x = location[0].toFloat()
             popupView.y = (location[1] + anchorView.height + dpToPx(2)).toFloat()
             activeDropdownView = popupView
+            popupView.bringToFront()
+            cursorView.bringToFront()
+            if (isTrackpadMode) {
+                touchpadOverlay.bringToFront()
+            }
         }
     }
 
@@ -1344,6 +1371,42 @@ class MainActivity : AppCompatActivity() {
             rootDropdown.x = (location[0] - dpToPx((180 * scale).toInt())).toFloat().coerceAtLeast(0f)
             rootDropdown.y = (location[1] + anchorView.height + dpToPx((2 * scale).toInt())).toFloat()
             activeDropdownView = rootDropdown
+            rootDropdown.bringToFront()
+            cursorView.bringToFront()
+            if (isTrackpadMode) {
+                touchpadOverlay.bringToFront()
+            }
+        }
+    }
+
+    fun showTooltip(text: String, x: Float, y: Float) {
+        runOnUiThread {
+            tooltipView.text = text
+            tooltipView.visibility = View.VISIBLE
+            tooltipView.x = x + dpToPx(12)
+            tooltipView.y = y + dpToPx(16)
+            tooltipView.bringToFront()
+            cursorView.bringToFront()
+        }
+    }
+
+    fun hideTooltip() {
+        runOnUiThread {
+            tooltipView.visibility = View.GONE
+        }
+    }
+
+    fun registerTooltipHover(view: View, textProvider: () -> String) {
+        view.setOnHoverListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE -> {
+                    showTooltip(textProvider(), cursorX, cursorY)
+                }
+                MotionEvent.ACTION_HOVER_EXIT -> {
+                    hideTooltip()
+                }
+            }
+            false
         }
     }
 
@@ -1624,6 +1687,11 @@ class MainActivity : AppCompatActivity() {
                 popupView.y = (location[1] + anchorView.height + dpToPx(2)).toFloat()
                 activeDropdownView = popupView
             }
+            popupView.bringToFront()
+            cursorView.bringToFront()
+            if (isTrackpadMode) {
+                touchpadOverlay.bringToFront()
+            }
         }
     }
 
@@ -1837,14 +1905,26 @@ class MainActivity : AppCompatActivity() {
                     view?.evaluateJavascript(
                         """
                         (function() {
-                            var meta = document.querySelector('meta[name=viewport]');
-                            if (!meta) {
-                                meta = document.createElement('meta');
-                                meta.name = 'viewport';
-                                document.head.appendChild(meta);
+                            function updateViewportScale() {
+                                var targetWidth = $targetWidth;
+                                var meta = document.querySelector('meta[name=viewport]');
+                                if (!meta) {
+                                    meta = document.createElement('meta');
+                                    meta.name = 'viewport';
+                                    document.head.appendChild(meta);
+                                }
+                                var screenWidth = window.screen.width;
+                                if (window.outerWidth && window.outerWidth > 0 && window.outerWidth < screenWidth) {
+                                    screenWidth = window.outerWidth;
+                                }
+                                var scale = screenWidth / targetWidth;
+                                meta.setAttribute('content', 'width=' + targetWidth + ', initial-scale=' + scale + ', minimum-scale=' + scale + ', maximum-scale=' + scale + ', user-scalable=no');
                             }
-                            var scale = window.screen.width / $targetWidth;
-                            meta.setAttribute('content', 'width=$targetWidth, initial-scale=' + scale + ', minimum-scale=' + scale + ', maximum-scale=' + scale + ', user-scalable=no');
+                            if (!window.hasResizeViewportListener) {
+                                window.hasResizeViewportListener = true;
+                                window.addEventListener('resize', updateViewportScale);
+                            }
+                            updateViewportScale();
                             
                             var style = document.getElementById('zoom-style');
                             if (!style) {
@@ -2007,6 +2087,7 @@ class MainActivity : AppCompatActivity() {
             useWideViewPort = true
             builtInZoomControls = false
             cacheMode = WebSettings.LOAD_DEFAULT
+            userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
 
         newWebView.setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
@@ -2171,6 +2252,73 @@ class MainActivity : AppCompatActivity() {
         switchTab(currentTabIndex)
     }
 
+    private fun showTabContextMenu(anchorView: View, tabIndex: Int) {
+        val tab = tabsList[tabIndex]
+        val list = mutableListOf<MacMenuItem>()
+
+        list.add(MacMenuItem("🔄 Reload Tab") {
+            tab.webView.reload()
+        })
+
+        list.add(MacMenuItem("👥 Duplicate Tab") {
+            val url = tab.webView.url ?: tab.url
+            openOrSwitchTab("web_browser_" + System.currentTimeMillis(), url, tab.title)
+        })
+
+        if (tab.id != "home") {
+            list.add(MacMenuItem("❌ Close Tab") {
+                closeTab(tab)
+            })
+
+            list.add(MacMenuItem("🧹 Close Other Tabs") {
+                val toClose = tabsList.filter { it.id != "home" && it.id != tab.id }
+                for (t in toClose) {
+                    executeCloseTab(t)
+                }
+            })
+        }
+
+        showMacMenu(anchorView, list)
+    }
+
+    private fun findViewAt(viewGroup: ViewGroup, x: Float, y: Float): View? {
+        val count = viewGroup.childCount
+        for (i in count - 1 downTo 0) {
+            val child = viewGroup.getChildAt(i)
+            if (child.visibility == View.VISIBLE) {
+                val loc = IntArray(2)
+                child.getLocationOnScreen(loc)
+                val rx = loc[0]
+                val ry = loc[1]
+                if (x >= rx && x <= rx + child.width && y >= ry && y <= ry + child.height) {
+                    if (child is ViewGroup) {
+                        val nested = findViewAt(child, x, y)
+                        if (nested != null) return nested
+                    }
+                    return child
+                }
+            }
+        }
+        return null
+    }
+
+    private fun findTabItemView(view: View?): View? {
+        var current = view
+        while (current != null && current != tabContainer) {
+            val tag = current.tag as? String
+            if (tag != null && tag.startsWith("tab_")) {
+                return current
+            }
+            val parent = current.parent
+            if (parent is View) {
+                current = parent
+            } else {
+                break
+            }
+        }
+        return null
+    }
+
     private fun refreshTabUI() {
         tabContainer.removeAllViews()
 
@@ -2179,6 +2327,7 @@ class MainActivity : AppCompatActivity() {
             val isActive = (i == currentTabIndex)
 
             val tabItem = LinearLayout(this).apply {
+                tag = "tab_$i"
                 orientation = LinearLayout.HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(
                     dpToPx((100 * currentScale).toInt()),
@@ -2201,6 +2350,7 @@ class MainActivity : AppCompatActivity() {
                     switchTab(i)
                 }
             }
+            registerTooltipHover(tabItem) { "Tab: " + tab.title }
 
             val titleText = TextView(this).apply {
                 text = tab.title
@@ -2230,12 +2380,17 @@ class MainActivity : AppCompatActivity() {
                     background = btnBg
                     
                     setOnHoverListener { v, event ->
-                        if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
-                            (v.background as? android.graphics.drawable.GradientDrawable)?.setColor(Color.parseColor("#334155"))
-                            setTextColor(Color.WHITE)
-                        } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
-                            (v.background as? android.graphics.drawable.GradientDrawable)?.setColor(Color.TRANSPARENT)
-                            setTextColor(Color.parseColor(if (isActive) "#94a3b8" else "#64748b"))
+                        when (event.action) {
+                            MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE -> {
+                                (v.background as? android.graphics.drawable.GradientDrawable)?.setColor(Color.parseColor("#334155"))
+                                setTextColor(Color.WHITE)
+                                showTooltip("Close Tab", cursorX, cursorY)
+                            }
+                            MotionEvent.ACTION_HOVER_EXIT -> {
+                                (v.background as? android.graphics.drawable.GradientDrawable)?.setColor(Color.TRANSPARENT)
+                                setTextColor(Color.parseColor(if (isActive) "#94a3b8" else "#64748b"))
+                                hideTooltip()
+                            }
                         }
                         false
                     }
@@ -2249,6 +2404,7 @@ class MainActivity : AppCompatActivity() {
 
             tabContainer.addView(tabItem)
         }
+
     }
 
     private fun updatePresentation() {
@@ -2365,38 +2521,38 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
         }
 
-        val addShortcut = { iconStr: String, labelStr: String, action: () -> Unit ->
-            val card = LinearLayout(this).apply {
+        val addShortcut: (String, String, () -> Unit) -> Unit = { iconStr, labelStr, action ->
+            val card = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dpToPx(12), dpToPx(8), dpToPx(12), dpToPx(8))
+                setPadding(this@MainActivity.dpToPx(12), this@MainActivity.dpToPx(8), this@MainActivity.dpToPx(12), this@MainActivity.dpToPx(8))
                 val bg = android.graphics.drawable.GradientDrawable().apply {
                     setColor(Color.parseColor("#1a1a26"))
-                    cornerRadius = dpToPx(8).toFloat()
+                    cornerRadius = this@MainActivity.dpToPx(8).toFloat()
                 }
                 background = bg
                 gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(
-                    dpToPx(90),
-                    dpToPx(65)
+                    this@MainActivity.dpToPx(90),
+                    this@MainActivity.dpToPx(65)
                 ).apply {
-                    leftMargin = dpToPx(8)
-                    rightMargin = dpToPx(8)
+                    leftMargin = this@MainActivity.dpToPx(8)
+                    rightMargin = this@MainActivity.dpToPx(8)
                 }
                 setOnClickListener {
                     hideSpotlightSearch()
                     action()
                 }
             }
-            val iconView = TextView(this).apply {
+            val iconView = TextView(this@MainActivity).apply {
                 text = iconStr
                 textSize = 18f
                 gravity = Gravity.CENTER
             }
-            val labelView = TextView(this).apply {
+            val labelView = TextView(this@MainActivity).apply {
                 text = labelStr
                 setTextColor(Color.WHITE)
                 textSize = 9f
-                setPadding(0, dpToPx(4), 0, 0)
+                setPadding(0, this@MainActivity.dpToPx(4), 0, 0)
                 gravity = Gravity.CENTER
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
             }
@@ -2484,250 +2640,20 @@ class MainActivity : AppCompatActivity() {
         imm.hideSoftInputFromWindow(spotlightInput.windowToken, 0)
     }
 
-    // Custom Draggable Virtual Keyboard Setup
-    private fun setupVirtualKeyboard() {
-        virtualKeyboardPanel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = FrameLayout.LayoutParams(
-                dpToPx(420),
-                dpToPx(190)
-            ).apply {
-                gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
-                bottomMargin = dpToPx(20)
-            }
-            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
-            visibility = View.GONE
-            elevation = dpToPx(16).toFloat()
-
-            val bg = android.graphics.drawable.GradientDrawable().apply {
-                setColor(Color.parseColor("#f912121a"))
-                setStroke(2, Color.parseColor("#3a3a4e"))
-                cornerRadius = dpToPx(12).toFloat()
-            }
-            background = bg
-        }
-
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(30)
-            )
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        val title = TextView(this).apply {
-            text = "⌨️ Floating Keyboard"
-            setTextColor(Color.parseColor("#94a3b8"))
-            textSize = 11f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        header.addView(title)
-
-        val close = TextView(this).apply {
-            text = " × "
-            setTextColor(Color.parseColor("#ef4444"))
-            textSize = 16f
-            setPadding(dpToPx(6), 0, dpToPx(6), 0)
-            setOnClickListener {
-                hideVirtualKeyboard()
-                presentation?.hideVirtualKeyboard()
-            }
-        }
-        header.addView(close)
-
-        virtualKeyboardPanel.addView(header)
-
-        var dX = 0f
-        var dY = 0f
-        header.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    dX = virtualKeyboardPanel.x - event.rawX
-                    dY = virtualKeyboardPanel.y - event.rawY
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    virtualKeyboardPanel.x = event.rawX + dX
-                    virtualKeyboardPanel.y = event.rawY + dY
-                }
-            }
-            true
-        }
-
-        val row1Keys = listOf("Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P")
-        val row2Keys = listOf("A", "S", "D", "F", "G", "H", "J", "K", "L")
-        val row3Keys = listOf("Shift", "Z", "X", "C", "V", "B", "N", "M", "Backspace")
-        val row4Keys = listOf("?123", "Space", "Enter")
-
-        virtualKeyboardPanel.addView(createKeyRow(row1Keys))
-        virtualKeyboardPanel.addView(createKeyRow(row2Keys))
-        virtualKeyboardPanel.addView(createKeyRow(row3Keys))
-        virtualKeyboardPanel.addView(createKeyRow(row4Keys))
-
-        workspaceContainer.addView(virtualKeyboardPanel)
-    }
-
-    private fun createKeyRow(keys: List<String>): LinearLayout {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(34)
-            ).apply {
-                topMargin = dpToPx(4)
-            }
-        }
-        for (key in keys) {
-            val keyView = TextView(this).apply {
-                text = key
-                setTextColor(Color.WHITE)
-                textSize = 12f
-                gravity = Gravity.CENTER
-                val weight = when(key) {
-                    "Space" -> 4f
-                    "Backspace", "Enter", "Shift", "?123" -> 1.5f
-                    else -> 1f
-                }
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, weight).apply {
-                    leftMargin = dpToPx(3)
-                    rightMargin = dpToPx(3)
-                }
-                val bg = android.graphics.drawable.GradientDrawable().apply {
-                    setColor(Color.parseColor("#2a2a3e"))
-                    cornerRadius = dpToPx(6).toFloat()
-                }
-                background = bg
-                
-                if (key.length == 1 && key[0].isLetter()) {
-                    rowViews.add(this)
-                }
-
-                setOnClickListener {
-                    onVirtualKeyClick(key)
-                }
-            }
-            row.addView(keyView)
-        }
-        return row
-    }
-
-    private fun onVirtualKeyClick(key: String) {
-        if (key == "Shift") {
-            isShiftEnabled = !isShiftEnabled
-            for (tv in rowViews) {
-                val txt = tv.text.toString()
-                tv.text = if (isShiftEnabled) txt.uppercase() else txt.lowercase()
-            }
-            return
-        }
-
-        if (spotlightOverlay.visibility == View.VISIBLE) {
-            when (key) {
-                "Backspace" -> {
-                    val str = spotlightInput.text.toString()
-                    if (str.isNotEmpty()) {
-                        spotlightInput.setText(str.substring(0, str.length - 1))
-                        spotlightInput.setSelection(spotlightInput.text.length)
-                    }
-                }
-                "Space" -> {
-                    spotlightInput.append(" ")
-                }
-                "Enter" -> {
-                    val query = spotlightInput.text.toString()
-                    if (query.trim().isNotEmpty()) {
-                        triggerSpotlightSearch(query)
-                        hideSpotlightSearch()
-                    }
-                }
-                else -> {
-                    if (key != "?123") {
-                        val txt = if (isShiftEnabled) key.uppercase() else key.lowercase()
-                        spotlightInput.append(txt)
-                    }
-                }
-            }
-        } else {
-            val webView = getActiveWebView() ?: return
-            val js = when (key) {
-                "Backspace" -> {
-                    """
-                    (function() {
-                        var el = document.activeElement;
-                        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.contentEditable === 'true')) {
-                            var val = el.value || '';
-                            if (val.length > 0) {
-                                el.value = val.substring(0, val.length - 1);
-                                el.dispatchEvent(new Event('input', { bubbles: true }));
-                            }
-                        }
-                    })();
-                    """.trimIndent()
-                }
-                "Space" -> {
-                    """
-                    (function() {
-                        var el = document.activeElement;
-                        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.contentEditable === 'true')) {
-                            el.value = (el.value || '') + ' ';
-                            el.dispatchEvent(new Event('input', { bubbles: true }));
-                        }
-                    })();
-                    """.trimIndent()
-                }
-                "Enter" -> {
-                    """
-                    (function() {
-                        var el = document.activeElement;
-                        if (el) {
-                            el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-                            el.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-                            el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-                            if (el.form) {
-                                el.form.submit();
-                            }
-                        }
-                    })();
-                    """.trimIndent()
-                }
-                else -> {
-                    if (key != "?123") {
-                        val txt = if (isShiftEnabled) key.uppercase() else key.lowercase()
-                        """
-                        (function() {
-                            var el = document.activeElement;
-                            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.contentEditable === 'true')) {
-                                el.value = (el.value || '') + '$txt';
-                                el.dispatchEvent(new Event('input', { bubbles: true }));
-                            }
-                        })();
-                        """.trimIndent()
-                    } else ""
-                }
-            }
-            if (js.isNotEmpty()) {
-                webView.evaluateJavascript(js, null)
-            }
-        }
-    }
-
     fun showVirtualKeyboard() {
         runOnUiThread {
-            virtualKeyboardPanel.visibility = View.VISIBLE
-            virtualKeyboardPanel.x = (workspaceContainer.width - virtualKeyboardPanel.width) / 2f
-            virtualKeyboardPanel.y = workspaceContainer.height - virtualKeyboardPanel.height - dpToPx(20).toFloat()
-            
-            cursorView.bringToFront()
-            if (isTrackpadMode) {
-                touchpadOverlay.bringToFront()
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            getActiveWebView()?.let { webView ->
+                webView.requestFocus()
+                imm.showSoftInput(webView, InputMethodManager.SHOW_IMPLICIT)
             }
         }
     }
 
     fun hideVirtualKeyboard() {
         runOnUiThread {
-            virtualKeyboardPanel.visibility = View.GONE
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(window.decorView.windowToken, 0)
         }
     }
 
@@ -2745,6 +2671,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateCursorViewPosition() {
         cursorView.x = cursorX
         cursorView.y = cursorY
+        cursorView.bringToFront()
     }
 
     private fun dispatchHoverAtCursor() {
@@ -2789,14 +2716,21 @@ class MainActivity : AppCompatActivity() {
         val webView = getActiveWebView() ?: return
         val offset = topBar.height + tabScroll.height + dpToPx(2)
 
+        val downTime = SystemClock.uptimeMillis()
+        val eventTime = SystemClock.uptimeMillis()
+
         if (cy >= offset) {
             val relativeY = cy - offset
-            val downTime = SystemClock.uptimeMillis()
-            val eventTime = SystemClock.uptimeMillis()
             val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, relativeY, 0).apply {
                 source = InputDevice.SOURCE_MOUSE
             }
             webView.dispatchGenericMotionEvent(hoverEvent)
+            hoverEvent.recycle()
+        } else {
+            val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, cy, 0).apply {
+                source = InputDevice.SOURCE_MOUSE
+            }
+            rootLayout.dispatchGenericMotionEvent(hoverEvent)
             hoverEvent.recycle()
         }
     }
@@ -2848,29 +2782,41 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        if (webView != null && cy >= offset) {
-            val relativeY = cy - offset
-            if (isRightClick) {
-                webView.evaluateJavascript(
-                    "var el = document.elementFromPoint($cx, $relativeY); if (el) { el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, button: 2, clientX: $cx, clientY: $relativeY })); }",
-                    null
-                )
-            } else {
-                val downTime = SystemClock.uptimeMillis()
-                val eventTime = SystemClock.uptimeMillis()
-                val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, relativeY, 0).apply {
-                    source = InputDevice.SOURCE_MOUSE
+        if (cy >= offset) {
+            if (webView != null) {
+                val relativeY = cy - offset
+                if (isRightClick) {
+                    webView.evaluateJavascript(
+                        "var el = document.elementFromPoint($cx, $relativeY); if (el) { el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, button: 2, clientX: $cx, clientY: $relativeY })); }",
+                        null
+                    )
+                } else {
+                    val downTime = SystemClock.uptimeMillis()
+                    val eventTime = SystemClock.uptimeMillis()
+                    val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, relativeY, 0).apply {
+                        source = InputDevice.SOURCE_MOUSE
+                    }
+                    val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, relativeY, 0).apply {
+                        source = InputDevice.SOURCE_MOUSE
+                    }
+                    webView.dispatchTouchEvent(downEvent)
+                    webView.dispatchTouchEvent(upEvent)
+                    downEvent.recycle()
+                    upEvent.recycle()
                 }
-                val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, relativeY, 0).apply {
-                    source = InputDevice.SOURCE_MOUSE
-                }
-                webView.dispatchTouchEvent(downEvent)
-                webView.dispatchTouchEvent(upEvent)
-                downEvent.recycle()
-                upEvent.recycle()
             }
         } else {
-            if (!isRightClick) {
+            if (isRightClick) {
+                val clickedView = findViewAt(rootLayout, cx, cy)
+                val tabView = findTabItemView(clickedView)
+                if (tabView != null) {
+                    val tag = tabView.tag as String
+                    val tabIndex = tag.substring(4).toIntOrNull()
+                    if (tabIndex != null && tabIndex in tabsList.indices) {
+                        showTabContextMenu(tabView, tabIndex)
+                    }
+                }
+            } else {
                 val downTime = SystemClock.uptimeMillis()
                 val eventTime = SystemClock.uptimeMillis()
                 val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, cy, 0).apply {
@@ -2889,7 +2835,28 @@ class MainActivity : AppCompatActivity() {
 
     private fun scrollActiveWebView(dy: Float) {
         val webView = getActiveWebView() ?: return
-        webView.scrollBy(0, (-dy).toInt())
+        val offset = topBar.height + tabScroll.height + dpToPx(2)
+        val cx = cursorX
+        val cy = cursorY - offset
+
+        val js = """
+            (function() {
+                var el = document.elementFromPoint($cx, $cy);
+                if (el) {
+                    var event = new WheelEvent('wheel', {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window,
+                        deltaY: ${-dy}
+                    });
+                    el.dispatchEvent(event);
+                }
+            })();
+        """.trimIndent()
+
+        runOnUiThread {
+            webView.evaluateJavascript(js, null)
+        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -3231,6 +3198,17 @@ class MainActivity : AppCompatActivity() {
                 if (isCasting && presentation != null) {
                     presentation?.performPresentationClick(false)
                 } else {
+                    performClickAtCursor(false)
+                }
+                return true
+            }
+
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                if (isCasting && presentation != null) {
+                    presentation?.performPresentationClick(false)
+                    presentation?.performPresentationClick(false)
+                } else {
+                    performClickAtCursor(false)
                     performClickAtCursor(false)
                 }
                 return true

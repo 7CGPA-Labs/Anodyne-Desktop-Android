@@ -82,17 +82,13 @@ class DesktopPresentation(
     private lateinit var spotlightInput: EditText
     private lateinit var spotlightBtn: TextView
 
-    // Floating Virtual Keyboard (Presentation Parity)
-    private lateinit var virtualKeyboardPanel: LinearLayout
-    private var isShiftEnabled = false
-    private val rowViews = mutableListOf<TextView>()
-
     // Presentation Virtual Cursor
     private lateinit var cursorView: ImageView
     private var cursorX = 0f
     private var cursorY = 0f
 
-    // Top Bar UI elements
+    // Tooltip & Top Bar UI elements
+    private lateinit var tooltipView: TextView
     private lateinit var topBar: LinearLayout
     private lateinit var logoText: TextView
     private lateinit var anodyneMenu: TextView
@@ -259,6 +255,7 @@ class DesktopPresentation(
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             setOnClickListener { showLxqtAppDrawer(this) }
         }
+        registerTooltipHover(logoText) { "App Menu" }
         leftContainer.addView(logoText)
         topBar.addView(leftContainer)
 
@@ -283,10 +280,15 @@ class DesktopPresentation(
             isFocusable = true
             
             setOnHoverListener { v, event ->
-                if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
-                    v.setBackgroundColor(Color.parseColor("#2a2a35"))
-                } else if (event.action == MotionEvent.ACTION_HOVER_EXIT) {
-                    v.setBackgroundColor(Color.TRANSPARENT)
+                when (event.action) {
+                    MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE -> {
+                        v.setBackgroundColor(Color.parseColor("#2a2a35"))
+                        showTooltip("Calendar & Notifications", cursorX, cursorY)
+                    }
+                    MotionEvent.ACTION_HOVER_EXIT -> {
+                        v.setBackgroundColor(Color.TRANSPARENT)
+                        hideTooltip()
+                    }
                 }
                 false
             }
@@ -331,6 +333,10 @@ class DesktopPresentation(
         }
         rightContainer.addView(batteryTextView)
         topBar.addView(rightContainer)
+
+        registerTooltipHover(spotlightBtn) { "Spotlight Search" }
+        registerTooltipHover(wifiTextView) { "Connected to: " + getWifiSSID() }
+        registerTooltipHover(batteryTextView) { "Battery: " + getBatteryPct() + "%" }
 
         rootLayout.addView(topBar)
 
@@ -434,11 +440,28 @@ class DesktopPresentation(
         }
         workspaceContainer.addView(cursorView)
 
+        // Initialize Floating Tooltip View
+        tooltipView = TextView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4))
+            val bg = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#f912121a"))
+                setStroke(1, Color.parseColor("#3a3a4e"))
+                cornerRadius = dpToPx(6).toFloat()
+            }
+            background = bg
+            setTextColor(Color.WHITE)
+            textSize = 8.5f
+            visibility = View.GONE
+            elevation = dpToPx(20).toFloat()
+        }
+        workspaceContainer.addView(tooltipView)
+
         // 4. Spotlight Search Overlay
         setupSpotlightSearch()
-
-        // 5. Virtual Keyboard (Presentation Parity)
-        setupVirtualKeyboard()
 
         setContentView(workspaceContainer)
 
@@ -516,10 +539,7 @@ class DesktopPresentation(
                         if (item.title.contains("▶")) {
                             val subItems = when {
                                 item.title.startsWith("Accessories") -> listOf(
-                                    MacMenuItem("Spotlight Search") { toggleSpotlightSearch() },
-                                    MacMenuItem("Floating Keyboard") { 
-                                        showVirtualKeyboard()
-                                    }
+                                    MacMenuItem("Spotlight Search") { toggleSpotlightSearch() }
                                 )
                                 item.title.startsWith("Internet") -> listOf(
                                     MacMenuItem("Web Browser") { openOrSwitchTab("web_" + System.currentTimeMillis(), "https://www.google.com", "Google") }
@@ -567,6 +587,8 @@ class DesktopPresentation(
             popupView.x = location[0].toFloat()
             popupView.y = (location[1] + anchorView.height + dpToPx(2)).toFloat()
             activeDropdownView = popupView
+            popupView.bringToFront()
+            cursorView.bringToFront()
         }
     }
 
@@ -787,6 +809,39 @@ class DesktopPresentation(
             rootDropdown.x = (location[0] - dpToPx((180 * scale).toInt())).toFloat().coerceAtLeast(0f)
             rootDropdown.y = (location[1] + anchorView.height + dpToPx((2 * scale).toInt())).toFloat()
             activeDropdownView = rootDropdown
+            rootDropdown.bringToFront()
+            cursorView.bringToFront()
+        }
+    }
+
+    fun showTooltip(text: String, x: Float, y: Float) {
+        clockHandler.post {
+            tooltipView.text = text
+            tooltipView.visibility = View.VISIBLE
+            tooltipView.x = x + dpToPx(12)
+            tooltipView.y = y + dpToPx(16)
+            tooltipView.bringToFront()
+            cursorView.bringToFront()
+        }
+    }
+
+    fun hideTooltip() {
+        clockHandler.post {
+            tooltipView.visibility = View.GONE
+        }
+    }
+
+    fun registerTooltipHover(view: View, textProvider: () -> String) {
+        view.setOnHoverListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE -> {
+                    showTooltip(textProvider(), cursorX, cursorY)
+                }
+                MotionEvent.ACTION_HOVER_EXIT -> {
+                    hideTooltip()
+                }
+            }
+            false
         }
     }
 
@@ -1057,6 +1112,8 @@ class DesktopPresentation(
                 popupView.y = (location[1] + anchorView.height + dpToPx(2)).toFloat()
                 activeDropdownView = popupView
             }
+            popupView.bringToFront()
+            cursorView.bringToFront()
         }
     }
 
@@ -1255,123 +1312,9 @@ class DesktopPresentation(
         spotlightOverlay.visibility = View.GONE
     }
 
-    // Custom Draggable Virtual Keyboard Setup for secondary screen visual mirror
-    private fun setupVirtualKeyboard() {
-        virtualKeyboardPanel = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = FrameLayout.LayoutParams(
-                dpToPx(420),
-                dpToPx(190)
-            ).apply {
-                gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
-                bottomMargin = dpToPx(20)
-            }
-            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
-            visibility = View.GONE
-            elevation = dpToPx(16).toFloat()
+    fun showVirtualKeyboard() {}
 
-            val bg = android.graphics.drawable.GradientDrawable().apply {
-                setColor(Color.parseColor("#f912121a"))
-                setStroke(2, Color.parseColor("#3a3a4e"))
-                cornerRadius = dpToPx(12).toFloat()
-            }
-            background = bg
-        }
-
-        val header = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(30)
-            )
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        val title = TextView(context).apply {
-            text = "⌨️ Floating Keyboard"
-            setTextColor(Color.parseColor("#94a3b8"))
-            textSize = 11f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        header.addView(title)
-
-        val close = TextView(context).apply {
-            text = " × "
-            setTextColor(Color.parseColor("#ef4444"))
-            textSize = 16f
-            setPadding(dpToPx(6), 0, dpToPx(6), 0)
-        }
-        header.addView(close)
-        virtualKeyboardPanel.addView(header)
-
-        val row1Keys = listOf("Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P")
-        val row2Keys = listOf("A", "S", "D", "F", "G", "H", "J", "K", "L")
-        val row3Keys = listOf("Shift", "Z", "X", "C", "V", "B", "N", "M", "Backspace")
-        val row4Keys = listOf("?123", "Space", "Enter")
-
-        virtualKeyboardPanel.addView(createKeyRow(row1Keys))
-        virtualKeyboardPanel.addView(createKeyRow(row2Keys))
-        virtualKeyboardPanel.addView(createKeyRow(row3Keys))
-        virtualKeyboardPanel.addView(createKeyRow(row4Keys))
-
-        workspaceContainer.addView(virtualKeyboardPanel)
-    }
-
-    private fun createKeyRow(keys: List<String>): LinearLayout {
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(34)
-            ).apply {
-                topMargin = dpToPx(4)
-            }
-        }
-        for (key in keys) {
-            val keyView = TextView(context).apply {
-                text = key
-                setTextColor(Color.WHITE)
-                textSize = 12f
-                gravity = Gravity.CENTER
-                val weight = when(key) {
-                    "Space" -> 4f
-                    "Backspace", "Enter", "Shift", "?123" -> 1.5f
-                    else -> 1f
-                }
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, weight).apply {
-                    leftMargin = dpToPx(3)
-                    rightMargin = dpToPx(3)
-                }
-                val bg = android.graphics.drawable.GradientDrawable().apply {
-                    setColor(Color.parseColor("#2a2a3e"))
-                    cornerRadius = dpToPx(6).toFloat()
-                }
-                background = bg
-                
-                if (key.length == 1 && key[0].isLetter()) {
-                    rowViews.add(this)
-                }
-            }
-            row.addView(keyView)
-        }
-        return row
-    }
-
-    fun showVirtualKeyboard() {
-        virtualKeyboardPanel.post {
-            virtualKeyboardPanel.visibility = View.VISIBLE
-            virtualKeyboardPanel.x = (workspaceContainer.width - virtualKeyboardPanel.width) / 2f
-            virtualKeyboardPanel.y = workspaceContainer.height - virtualKeyboardPanel.height - dpToPx(20).toFloat()
-            cursorView.bringToFront()
-        }
-    }
-
-    fun hideVirtualKeyboard() {
-        virtualKeyboardPanel.post {
-            virtualKeyboardPanel.visibility = View.GONE
-        }
-    }
+    fun hideVirtualKeyboard() {}
 
     fun movePresentationCursor(dx: Float, dy: Float) {
         clockHandler.post {
@@ -1383,6 +1326,7 @@ class DesktopPresentation(
 
             cursorView.x = cursorX
             cursorView.y = cursorY
+            cursorView.bringToFront()
 
             dispatchHoverAtCursor()
         }
@@ -1478,7 +1422,26 @@ class DesktopPresentation(
     fun scrollPresentation(dy: Float) {
         clockHandler.post {
             val webView = getActiveWebView() ?: return@post
-            webView.scrollBy(0, (-dy).toInt())
+            val offset = topBar.height + tabScroll.height + dpToPx(2)
+            val cx = cursorX
+            val cy = cursorY - offset
+
+            val js = """
+                (function() {
+                    var el = document.elementFromPoint($cx, $cy);
+                    if (el) {
+                        var event = new WheelEvent('wheel', {
+                            bubbles: true,
+                            cancelable: true,
+                            view: window,
+                            deltaY: ${-dy}
+                        });
+                        el.dispatchEvent(event);
+                    }
+                })();
+            """.trimIndent()
+
+            webView.evaluateJavascript(js, null)
         }
     }
 
@@ -1523,14 +1486,21 @@ class DesktopPresentation(
         val webView = getActiveWebView() ?: return
         val offset = topBar.height + tabScroll.height + dpToPx(2)
 
+        val downTime = SystemClock.uptimeMillis()
+        val eventTime = SystemClock.uptimeMillis()
+
         if (cy >= offset) {
             val relativeY = cy - offset
-            val downTime = SystemClock.uptimeMillis()
-            val eventTime = SystemClock.uptimeMillis()
             val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, relativeY, 0).apply {
                 source = InputDevice.SOURCE_MOUSE
             }
             webView.dispatchGenericMotionEvent(hoverEvent)
+            hoverEvent.recycle()
+        } else {
+            val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, cy, 0).apply {
+                source = InputDevice.SOURCE_MOUSE
+            }
+            rootLayout.dispatchGenericMotionEvent(hoverEvent)
             hoverEvent.recycle()
         }
     }
@@ -1571,13 +1541,26 @@ class DesktopPresentation(
                     view?.evaluateJavascript(
                         """
                         (function() {
-                            var meta = document.querySelector('meta[name=viewport]');
-                            if (!meta) {
-                                meta = document.createElement('meta');
-                                meta.name = 'viewport';
-                                document.head.appendChild(meta);
+                            function updateViewportScale() {
+                                var targetWidth = $targetWidth;
+                                var meta = document.querySelector('meta[name=viewport]');
+                                if (!meta) {
+                                    meta = document.createElement('meta');
+                                    meta.name = 'viewport';
+                                    document.head.appendChild(meta);
+                                }
+                                var screenWidth = window.screen.width;
+                                if (window.outerWidth && window.outerWidth > 0 && window.outerWidth < screenWidth) {
+                                    screenWidth = window.outerWidth;
+                                }
+                                var scale = screenWidth / targetWidth;
+                                meta.setAttribute('content', 'width=' + targetWidth + ', initial-scale=' + scale + ', minimum-scale=' + scale + ', maximum-scale=' + scale + ', user-scalable=no');
                             }
-                            meta.setAttribute('content', 'width=$targetWidth, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no');
+                            if (!window.hasResizeViewportListener) {
+                                window.hasResizeViewportListener = true;
+                                window.addEventListener('resize', updateViewportScale);
+                            }
+                            updateViewportScale();
                             
                             var style = document.getElementById('zoom-style');
                             if (!style) {
@@ -1691,6 +1674,7 @@ class DesktopPresentation(
             builtInZoomControls = false
             displayZoomControls = false
             cacheMode = WebSettings.LOAD_DEFAULT
+            userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
 
         val sysContext = AndroidSysContext(context,
