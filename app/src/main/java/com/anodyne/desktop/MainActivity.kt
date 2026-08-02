@@ -508,27 +508,30 @@ class MainActivity : AppCompatActivity() {
                 val x = ev.rawX
                 val y = ev.rawY
                 val location = IntArray(2)
+                var targetMenu: View? = null
 
-                activeDropdownView?.let { menu ->
-                    menu.getLocationOnScreen(location)
-                    val mx = location[0].toFloat()
-                    val my = location[1].toFloat()
-                    val mw = menu.width.toFloat()
-                    val mh = menu.height.toFloat()
-                    if (x >= mx && x <= mx + mw && y >= my && y <= my + mh) {
+                activeSubmenuView?.let { sub ->
+                    sub.getLocationOnScreen(location)
+                    val sx = location[0].toFloat()
+                    val sy = location[1].toFloat()
+                    val sw = sub.width.toFloat()
+                    val sh = sub.height.toFloat()
+                    if (x >= sx && x <= sx + sw && y >= sy && y <= sy + sh) {
                         clickedInsideMenu = true
+                        targetMenu = sub
                     }
                 }
 
                 if (!clickedInsideMenu) {
-                    activeSubmenuView?.let { sub ->
-                        sub.getLocationOnScreen(location)
-                        val sx = location[0].toFloat()
-                        val sy = location[1].toFloat()
-                        val sw = sub.width.toFloat()
-                        val sh = sub.height.toFloat()
-                        if (x >= sx && x <= sx + sw && y >= sy && y <= sy + sh) {
+                    activeDropdownView?.let { menu ->
+                        menu.getLocationOnScreen(location)
+                        val mx = location[0].toFloat()
+                        val my = location[1].toFloat()
+                        val mw = menu.width.toFloat()
+                        val mh = menu.height.toFloat()
+                        if (x >= mx && x <= mx + mw && y >= my && y <= my + mh) {
                             clickedInsideMenu = true
+                            targetMenu = menu
                         }
                     }
                 }
@@ -542,15 +545,61 @@ class MainActivity : AppCompatActivity() {
                         val th = tabDropdown.height.toFloat()
                         if (x >= tx && x <= tx + tw && y >= ty && y <= ty + th) {
                             clickedInsideMenu = true
+                            targetMenu = tabDropdown
                         }
                     }
                 }
 
-                if (!clickedInsideMenu) {
+                if (clickedInsideMenu && targetMenu != null) {
+                    targetMenu!!.getLocationOnScreen(location)
+                    val localX = x - location[0].toFloat()
+                    val localY = y - location[1].toFloat()
+                    
+                    val downTime = SystemClock.uptimeMillis()
+                    val eventTime = SystemClock.uptimeMillis()
+                    val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, localX, localY, 0).apply {
+                        source = InputDevice.SOURCE_TOUCHSCREEN
+                    }
+                    val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, localX, localY, 0).apply {
+                        source = InputDevice.SOURCE_TOUCHSCREEN
+                    }
+                    targetMenu!!.dispatchTouchEvent(downEvent)
+                    targetMenu!!.dispatchTouchEvent(upEvent)
+                    downEvent.recycle()
+                    upEvent.recycle()
+                    return true // Consume touch
+                } else {
                     dismissActiveDropdown()
+                    return true // Consume touch
                 }
             }
         }
+
+        // Detect physical right click
+        if (ev.action == MotionEvent.ACTION_DOWN && ev.buttonState == MotionEvent.BUTTON_SECONDARY) {
+            val cx = ev.x
+            val cy = ev.y
+            val offset = topBar.height + tabScroll.height + dpToPx(2)
+            
+            if (cy >= offset) {
+                getActiveWebView()?.let { webView ->
+                    showWebPageContextMenu(webView, cx, cy)
+                    return true
+                }
+            } else {
+                val clickedView = findViewAt(rootLayout, cx, cy)
+                val tabView = findTabItemView(clickedView)
+                if (tabView != null) {
+                    val tag = tabView.tag as String
+                    val tabIndex = tag.substring(4).toIntOrNull()
+                    if (tabIndex != null && tabIndex in tabsList.indices) {
+                        showTabContextMenu(tabView, tabIndex)
+                        return true
+                    }
+                }
+            }
+        }
+
         return super.dispatchTouchEvent(ev)
     }
 
@@ -1326,11 +1375,11 @@ class MainActivity : AppCompatActivity() {
         dismissActiveDropdown()
 
         val scale = currentScale
-        val textSz = 8.0f * scale
-        val padLeft = dpToPx((10 * scale).toInt())
-        val padTop = dpToPx((3.5 * scale).toInt())
-        val padRight = dpToPx((15 * scale).toInt())
-        val padBottom = dpToPx((3.5 * scale).toInt())
+        val textSz = 8.5f * scale
+        val padLeft = dpToPx((12 * scale).toInt())
+        val padTop = dpToPx((4 * scale).toInt())
+        val padRight = dpToPx((16 * scale).toInt())
+        val padBottom = dpToPx((4 * scale).toInt())
         val cornerRad = dpToPx((6 * scale).toInt()).toFloat()
         val elev = dpToPx((6 * scale).toInt()).toFloat()
 
@@ -1359,7 +1408,7 @@ class MainActivity : AppCompatActivity() {
         val searchIcon = TextView(this).apply {
             text = "🔍 "
             setTextColor(Color.parseColor("#94a3b8"))
-            textSize = 8.0f * scale
+            textSize = 8.5f * scale
             gravity = Gravity.CENTER_VERTICAL
         }
         searchLayout.addView(searchIcon)
@@ -1531,7 +1580,7 @@ class MainActivity : AppCompatActivity() {
             hint = "Search..."
             setHintTextColor(Color.parseColor("#475569"))
             setTextColor(Color.WHITE)
-            textSize = 8.0f * scale
+            textSize = 8.5f * scale
             background = null
             layoutParams = LinearLayout.LayoutParams(
                 0,
@@ -1570,7 +1619,7 @@ class MainActivity : AppCompatActivity() {
         popupView.addView(itemsContainer)
 
         popupView.layoutParams = FrameLayout.LayoutParams(
-            dpToPx((125 * scale).toInt()),
+            dpToPx((180 * scale).toInt()),
             ViewGroup.LayoutParams.WRAP_CONTENT
         )
         workspaceContainer.addView(popupView)
@@ -1918,7 +1967,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     // View-based Dropdown Menu system inside workspaceContainer (Trackpad hover & click friendly)
-    private fun showMacMenu(anchorView: View, menuItems: List<MacMenuItem>, isSubMenu: Boolean = false, subMenuX: Float = 0f, subMenuY: Float = 0f) {
+    private fun showMacMenu(
+        anchorView: View, 
+        menuItems: List<MacMenuItem>, 
+        isSubMenu: Boolean = false, 
+        subMenuX: Float = 0f, 
+        subMenuY: Float = 0f,
+        useDirectCoords: Boolean = false
+    ) {
         if (!isSubMenu) {
             dismissActiveDropdown()
         }
@@ -2034,6 +2090,10 @@ class MainActivity : AppCompatActivity() {
                 popupView.x = subMenuX
                 popupView.y = subMenuY
                 activeSubmenuView = popupView
+            } else if (useDirectCoords) {
+                popupView.x = subMenuX
+                popupView.y = subMenuY
+                activeDropdownView = popupView
             } else {
                 val location = IntArray(2)
                 anchorView.getLocationOnScreen(location)
@@ -3181,25 +3241,28 @@ class MainActivity : AppCompatActivity() {
         val hasActiveMenu = activeDropdownView != null || activeSubmenuView != null || activeTabNavDropdown != null
         if (hasActiveMenu) {
             var clickedInside = false
+            var targetMenu: View? = null
             
-            activeDropdownView?.let { menu ->
-                val mx = menu.x
-                val my = menu.y
-                val mw = menu.width
-                val mh = menu.height
-                if (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh) {
+            activeSubmenuView?.let { sub ->
+                val sx = sub.x
+                val sy = sub.y
+                val sw = sub.width
+                val sh = sub.height
+                if (cx >= sx && cx <= sx + sw && cy >= sy && cy <= sy + sh) {
                     clickedInside = true
+                    targetMenu = sub
                 }
             }
-            
+
             if (!clickedInside) {
-                activeSubmenuView?.let { sub ->
-                    val sx = sub.x
-                    val sy = sub.y
-                    val sw = sub.width
-                    val sh = sub.height
-                    if (cx >= sx && cx <= sx + sw && cy >= sy && cy <= sy + sh) {
+                activeDropdownView?.let { menu ->
+                    val mx = menu.x
+                    val my = menu.y
+                    val mw = menu.width
+                    val mh = menu.height
+                    if (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh) {
                         clickedInside = true
+                        targetMenu = menu
                     }
                 }
             }
@@ -3212,6 +3275,7 @@ class MainActivity : AppCompatActivity() {
                     val mh = menu.height
                     if (cx >= mx && cx <= mx + mw && cy >= my && cy <= my + mh) {
                         clickedInside = true
+                        targetMenu = menu
                     }
                 }
             }
@@ -3220,25 +3284,22 @@ class MainActivity : AppCompatActivity() {
                 dismissActiveDropdown()
                 return
             } else {
-                if (!isRightClick) {
-                    val targetMenu = activeDropdownView ?: activeSubmenuView ?: activeTabNavDropdown
-                    if (targetMenu != null) {
-                        val localX = cx - targetMenu.x
-                        val localY = cy - targetMenu.y
-                        
-                        val downTime = SystemClock.uptimeMillis()
-                        val eventTime = SystemClock.uptimeMillis()
-                        val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, localX, localY, 0).apply {
-                            source = InputDevice.SOURCE_MOUSE
-                        }
-                        val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, localX, localY, 0).apply {
-                            source = InputDevice.SOURCE_MOUSE
-                        }
-                        targetMenu.dispatchTouchEvent(downEvent)
-                        targetMenu.dispatchTouchEvent(upEvent)
-                        downEvent.recycle()
-                        upEvent.recycle()
+                if (!isRightClick && targetMenu != null) {
+                    val localX = cx - targetMenu!!.x
+                    val localY = cy - targetMenu!!.y
+                    
+                    val downTime = SystemClock.uptimeMillis()
+                    val eventTime = SystemClock.uptimeMillis()
+                    val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, localX, localY, 0).apply {
+                        source = InputDevice.SOURCE_MOUSE
                     }
+                    val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, localX, localY, 0).apply {
+                        source = InputDevice.SOURCE_MOUSE
+                    }
+                    targetMenu!!.dispatchTouchEvent(downEvent)
+                    targetMenu!!.dispatchTouchEvent(upEvent)
+                    downEvent.recycle()
+                    upEvent.recycle()
                 }
                 return
             }
@@ -3326,7 +3387,7 @@ class MainActivity : AppCompatActivity() {
             })
         }
 
-        showMacMenu(webView, menuItems, isSubMenu = true, subMenuX = x, subMenuY = y)
+        showMacMenu(webView, menuItems, isSubMenu = false, subMenuX = x, subMenuY = y, useDirectCoords = true)
     }
 
     private fun showTabNavigationDropdown(anchorView: View, tabIndex: Int) {
