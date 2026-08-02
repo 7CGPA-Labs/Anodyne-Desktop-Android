@@ -1261,11 +1261,11 @@ class MainActivity : AppCompatActivity() {
         dismissActiveDropdown()
 
         val scale = currentScale
-        val textSz = 9.5f * scale
-        val padLeft = dpToPx((14 * scale).toInt())
-        val padTop = dpToPx((5 * scale).toInt())
-        val padRight = dpToPx((22 * scale).toInt())
-        val padBottom = dpToPx((5 * scale).toInt())
+        val textSz = 8.0f * scale
+        val padLeft = dpToPx((10 * scale).toInt())
+        val padTop = dpToPx((3.5 * scale).toInt())
+        val padRight = dpToPx((15 * scale).toInt())
+        val padBottom = dpToPx((3.5 * scale).toInt())
         val cornerRad = dpToPx((6 * scale).toInt()).toFloat()
         val elev = dpToPx((6 * scale).toInt()).toFloat()
 
@@ -1294,7 +1294,7 @@ class MainActivity : AppCompatActivity() {
         val searchIcon = TextView(this).apply {
             text = "🔍 "
             setTextColor(Color.parseColor("#94a3b8"))
-            textSize = 9.5f * scale
+            textSize = 8.0f * scale
             gravity = Gravity.CENTER_VERTICAL
         }
         searchLayout.addView(searchIcon)
@@ -1460,7 +1460,7 @@ class MainActivity : AppCompatActivity() {
             hint = "Search..."
             setHintTextColor(Color.parseColor("#475569"))
             setTextColor(Color.WHITE)
-            textSize = 9.5f * scale
+            textSize = 8.0f * scale
             background = null
             layoutParams = LinearLayout.LayoutParams(
                 0,
@@ -1499,7 +1499,7 @@ class MainActivity : AppCompatActivity() {
         popupView.addView(itemsContainer)
 
         popupView.layoutParams = FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
+            dpToPx((125 * scale).toInt()),
             ViewGroup.LayoutParams.WRAP_CONTENT
         )
         workspaceContainer.addView(popupView)
