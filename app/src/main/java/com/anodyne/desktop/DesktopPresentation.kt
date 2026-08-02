@@ -1330,10 +1330,10 @@ class DesktopPresentation(
                 if (!isRightClick) {
                     val downTime = SystemClock.uptimeMillis()
                     val eventTime = SystemClock.uptimeMillis()
-                    val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, cy, 0).apply {
+                    val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx - rootLayout.x, cy - rootLayout.y, 0).apply {
                         source = InputDevice.SOURCE_MOUSE
                     }
-                    val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, cy, 0).apply {
+                    val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx - rootLayout.x, cy - rootLayout.y, 0).apply {
                         source = InputDevice.SOURCE_MOUSE
                     }
                     rootLayout.dispatchTouchEvent(downEvent)
@@ -1528,7 +1528,7 @@ class DesktopPresentation(
             webView.dispatchGenericMotionEvent(hoverEvent)
             hoverEvent.recycle()
         } else {
-            val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, cy, 0).apply {
+            val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx - rootLayout.x, cy - rootLayout.y, 0).apply {
                 source = InputDevice.SOURCE_MOUSE
             }
             rootLayout.dispatchGenericMotionEvent(hoverEvent)
