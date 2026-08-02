@@ -1040,7 +1040,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         val titleView = TextView(this).apply {
-            text = "Anodyne OS"
+            text = "Ano"
             setTextColor(Color.WHITE)
             textSize = 24f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
@@ -2952,7 +2952,9 @@ class MainActivity : AppCompatActivity() {
                     rightMargin = dpToPx((6 * currentScale).toInt())
                 }
                 scaleType = ImageView.ScaleType.FIT_CENTER
-                if (tab.favicon != null) {
+                if (tab.id == "home") {
+                    setImageResource(dev.seven_cgpalabs.anodynedesktop.R.mipmap.ic_launcher)
+                } else if (tab.favicon != null) {
                     setImageBitmap(tab.favicon)
                 } else {
                     val fallbackBmp = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
