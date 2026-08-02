@@ -592,7 +592,9 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
             } else {
-                val clickedView = findViewAt(rootLayout, cx, cy)
+                val loc = IntArray(2)
+                workspaceContainer.getLocationOnScreen(loc)
+                val clickedView = findViewAt(rootLayout, cx + loc[0], cy + loc[1])
                 val tabView = findTabItemView(clickedView)
                 if (tabView != null) {
                     val tag = tabView.tag as String
@@ -3409,7 +3411,7 @@ class MainActivity : AppCompatActivity() {
             webView.dispatchGenericMotionEvent(hoverEvent)
             hoverEvent.recycle()
         } else {
-            val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx, cy, 0).apply {
+            val hoverEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_HOVER_MOVE, cx - rootLayout.x, cy - rootLayout.y, 0).apply {
                 source = InputDevice.SOURCE_MOUSE
             }
             rootLayout.dispatchGenericMotionEvent(hoverEvent)
@@ -3513,7 +3515,9 @@ class MainActivity : AppCompatActivity() {
             }
         } else {
             if (isRightClick) {
-                val clickedView = findViewAt(rootLayout, cx, cy)
+                val loc = IntArray(2)
+                workspaceContainer.getLocationOnScreen(loc)
+                val clickedView = findViewAt(rootLayout, cx + loc[0], cy + loc[1])
                 val tabView = findTabItemView(clickedView)
                 if (tabView != null) {
                     val tag = tabView.tag as String
@@ -3525,10 +3529,10 @@ class MainActivity : AppCompatActivity() {
             } else {
                 val downTime = SystemClock.uptimeMillis()
                 val eventTime = SystemClock.uptimeMillis()
-                val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx, cy, 0).apply {
+                val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, cx - rootLayout.x, cy - rootLayout.y, 0).apply {
                     source = InputDevice.SOURCE_MOUSE
                 }
-                val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx, cy, 0).apply {
+                val upEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_UP, cx - rootLayout.x, cy - rootLayout.y, 0).apply {
                     source = InputDevice.SOURCE_MOUSE
                 }
                 rootLayout.dispatchTouchEvent(downEvent)
