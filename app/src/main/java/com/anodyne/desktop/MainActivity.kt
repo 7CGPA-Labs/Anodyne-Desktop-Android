@@ -623,6 +623,9 @@ class MainActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
+            setBackgroundColor(Color.BLACK)
+            val safePadding = dpToPx(14)
+            setPadding(safePadding, safePadding, safePadding, safePadding)
         }
 
         rootLayout = LinearLayout(this).apply {
