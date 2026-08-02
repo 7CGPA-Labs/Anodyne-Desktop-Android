@@ -396,6 +396,20 @@ class MainActivity : AppCompatActivity() {
     private var lastTouchX = 0f
     private var lastTouchY = 0f
 
+    // Notifications & Media Control Center State
+    data class NotificationItem(val title: String, val text: String, val time: String)
+    val notificationsList = mutableListOf<NotificationItem>()
+    
+    var mediaTitle: String = ""
+    var mediaArtist: String = ""
+    var mediaAlbum: String = ""
+    var mediaArtworkUrl: String = ""
+    var mediaPlaybackState: String = "none" // "none", "playing", "paused"
+    var mediaHasPlay: Boolean = false
+    var mediaHasPause: Boolean = false
+    var mediaHasPrev: Boolean = false
+    var mediaHasNext: Boolean = false
+
     private var currentScale = 1.0f
 
     private fun applyUiScale() {
@@ -613,6 +627,10 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         loadDynamicRegistry()
+        
+        notificationsList.add(NotificationItem("System Update", "Anodyne Desktop is up to date.", "Just now"))
+        notificationsList.add(NotificationItem("Remote Access Server", "Active connection PIN is $accessPin", "2m ago"))
+        notificationsList.add(NotificationItem("Battery Status", "Running on " + getBatteryPowerSource(), "10m ago"))
 
         supportActionBar?.hide()
 
@@ -1760,15 +1778,59 @@ class MainActivity : AppCompatActivity() {
         popupWindow.showAtLocation(anchorView, Gravity.NO_GRAVITY, location[0] + anchorView.width + dpToPx(4), location[1])
     }
 
+    fun addNotificationFromWeb(title: String, body: String) {
+        runOnUiThread {
+            notificationsList.add(0, NotificationItem(title, body, "Just now"))
+            refreshGnomeCalendarDropdownIfVisible()
+        }
+    }
+
+    fun updateMediaMetadataFromWeb(title: String, artist: String, album: String, artworkUrl: String) {
+        mediaTitle = title
+        mediaArtist = artist
+        mediaAlbum = album
+        mediaArtworkUrl = artworkUrl
+        refreshGnomeCalendarDropdownIfVisible()
+    }
+
+    fun updateMediaStateFromWeb(state: String) {
+        mediaPlaybackState = state
+        refreshGnomeCalendarDropdownIfVisible()
+    }
+
+    fun registerMediaActionFromWeb(action: String, registered: Boolean) {
+        when (action) {
+            "play" -> mediaHasPlay = registered
+            "pause" -> mediaHasPause = registered
+            "previoustrack" -> mediaHasPrev = registered
+            "nexttrack" -> mediaHasNext = registered
+        }
+        refreshGnomeCalendarDropdownIfVisible()
+    }
+
+    private fun refreshGnomeCalendarDropdownIfVisible() {
+        if (activeDropdownView?.tag == "gnome_calendar") {
+            showGnomeCalendarDropdown(clockTextView)
+        }
+    }
+
+    fun triggerWebMediaAction(action: String) {
+        val webView = getActiveWebView()
+        webView?.post {
+            webView.evaluateJavascript("if (window.__triggerMediaAction) { window.__triggerMediaAction('$action'); }", null)
+        }
+    }
+
     // GNOME-style Date & Time drop-down Calendar and Notification Area inside workspaceContainer
     private fun showGnomeCalendarDropdown(anchorView: View) {
         dismissActiveDropdown()
 
         val scale = currentScale
         val popupWidth = dpToPx((380 * scale).toInt())
-        val popupHeight = dpToPx((230 * scale).toInt())
+        val popupHeight = dpToPx((270 * scale).toInt()) // Increased height for media widget
         
         val rootDropdown = LinearLayout(this).apply {
+            tag = "gnome_calendar"
             orientation = LinearLayout.HORIZONTAL
             setPadding(dpToPx((12 * scale).toInt()), dpToPx((12 * scale).toInt()), dpToPx((12 * scale).toInt()), dpToPx((12 * scale).toInt()))
             val borderDrawable = android.graphics.drawable.GradientDrawable().apply {
@@ -1855,12 +1917,137 @@ class MainActivity : AppCompatActivity() {
             notifList.addView(item)
         }
 
-        addNotification("System Update", "Anodyne Desktop is up to date.", "Just now")
-        addNotification("Remote Access Server", "Active connection PIN is $accessPin", "2m ago")
-        addNotification("Battery Status", "Running on " + getBatteryPowerSource(), "10m ago")
+        // Dynamically populate notifications from list
+        for (notif in notificationsList) {
+            addNotification(notif.title, notif.text, notif.time)
+        }
 
         notifScroll.addView(notifList)
         notificationsLayout.addView(notifScroll)
+
+        // Media Player Widget inside notification center
+        if (mediaPlaybackState != "none" && mediaTitle.isNotEmpty()) {
+            val mediaCard = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dpToPx((8 * scale).toInt()), dpToPx((8 * scale).toInt()), dpToPx((8 * scale).toInt()), dpToPx((8 * scale).toInt()))
+                val bg = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.parseColor("#13131c"))
+                    setStroke(dpToPx(1), Color.parseColor("#2a2a3e"))
+                    cornerRadius = dpToPx((8 * scale).toInt()).toFloat()
+                }
+                background = bg
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dpToPx((8 * scale).toInt())
+                }
+                gravity = Gravity.CENTER_VERTICAL
+            }
+
+            val artImage = ImageView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    dpToPx((32 * scale).toInt()),
+                    dpToPx((32 * scale).toInt())
+                ).apply {
+                    rightMargin = dpToPx((8 * scale).toInt())
+                }
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                if (mediaArtworkUrl.isNotEmpty()) {
+                    val imgView = this
+                    val urlStr = mediaArtworkUrl
+                    Thread {
+                        try {
+                            val stream = java.net.URL(urlStr).openStream()
+                            val bmp = android.graphics.BitmapFactory.decodeStream(stream)
+                            runOnUiThread {
+                                imgView.setImageBitmap(bmp)
+                            }
+                        } catch (e: Exception) {
+                            runOnUiThread {
+                                imgView.setImageResource(android.R.drawable.ic_media_play)
+                            }
+                        }
+                    }.start()
+                } else {
+                    setImageResource(android.R.drawable.ic_media_play)
+                }
+            }
+            mediaCard.addView(artImage)
+
+            val infoLayout = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            val trackTitle = TextView(this).apply {
+                text = mediaTitle
+                setTextColor(Color.WHITE)
+                textSize = 8.5f * scale
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+            }
+            val trackArtist = TextView(this).apply {
+                text = if (mediaArtist.isNotEmpty()) mediaArtist else "Unknown Artist"
+                setTextColor(Color.parseColor("#94a3b8"))
+                textSize = 7.5f * scale
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+            }
+            infoLayout.addView(trackTitle)
+            infoLayout.addView(trackArtist)
+            mediaCard.addView(infoLayout)
+
+            val controlsLayout = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+            }
+
+            if (mediaHasPrev) {
+                val prevBtn = TextView(this).apply {
+                    text = "⏮"
+                    setTextColor(Color.WHITE)
+                    textSize = 14f * scale
+                    setPadding(dpToPx((6 * scale).toInt()), 0, dpToPx((6 * scale).toInt()), 0)
+                    setOnClickListener {
+                        triggerWebMediaAction("previoustrack")
+                    }
+                }
+                controlsLayout.addView(prevBtn)
+            }
+
+            val playPauseBtn = TextView(this).apply {
+                text = if (mediaPlaybackState == "playing") "⏸" else "▶"
+                setTextColor(Color.WHITE)
+                textSize = 14f * scale
+                setPadding(dpToPx((6 * scale).toInt()), 0, dpToPx((6 * scale).toInt()), 0)
+                setOnClickListener {
+                    if (mediaPlaybackState == "playing") {
+                        triggerWebMediaAction("pause")
+                    } else {
+                        triggerWebMediaAction("play")
+                    }
+                }
+            }
+            controlsLayout.addView(playPauseBtn)
+
+            if (mediaHasNext) {
+                val nextBtn = TextView(this).apply {
+                    text = "⏭"
+                    setTextColor(Color.WHITE)
+                    textSize = 14f * scale
+                    setPadding(dpToPx((6 * scale).toInt()), 0, dpToPx((6 * scale).toInt()), 0)
+                    setOnClickListener {
+                        triggerWebMediaAction("nexttrack")
+                    }
+                }
+                controlsLayout.addView(nextBtn)
+            }
+
+            mediaCard.addView(controlsLayout)
+            notificationsLayout.addView(mediaCard)
+        }
+
         rootDropdown.addView(notificationsLayout)
 
         val divider = View(this).apply {
@@ -2601,6 +2788,67 @@ class MainActivity : AppCompatActivity() {
                                     }
                                 }
                             });
+
+                            // HTML5 Web Notifications API Mock
+                            (function() {
+                                function MockNotification(title, options) {
+                                    this.title = title;
+                                    this.body = options ? (options.body || "") : "";
+                                    if (window.sysContext && typeof window.sysContext.postNotification === 'function') {
+                                        window.sysContext.postNotification(this.title, this.body);
+                                    }
+                                }
+                                MockNotification.permission = "granted";
+                                MockNotification.requestPermission = function(cb) {
+                                    if (cb) cb("granted");
+                                    return Promise.resolve("granted");
+                                };
+                                window.Notification = MockNotification;
+                            })();
+
+                            // HTML5 Media Session API Mock
+                            (function() {
+                                if (!navigator.mediaSession) {
+                                    navigator.mediaSession = {};
+                                }
+                                var metadataVal = null;
+                                var stateVal = "none";
+                                var actionHandlers = {};
+
+                                Object.defineProperty(navigator.mediaSession, 'metadata', {
+                                    get: function() { return metadataVal; },
+                                    set: function(val) {
+                                        metadataVal = val;
+                                        if (val && window.sysContext && typeof window.sysContext.updateMediaMetadata === 'function') {
+                                            window.sysContext.updateMediaMetadata(val.title || "", val.artist || "", val.album || "", val.artwork ? (val.artwork[0] ? val.artwork[0].src : "") : "");
+                                        }
+                                    }
+                                });
+
+                                Object.defineProperty(navigator.mediaSession, 'playbackState', {
+                                    get: function() { return stateVal; },
+                                    set: function(val) {
+                                        stateVal = val;
+                                        if (window.sysContext && typeof window.sysContext.updateMediaState === 'function') {
+                                            window.sysContext.updateMediaState(val);
+                                        }
+                                    }
+                                });
+
+                                navigator.mediaSession.setActionHandler = function(action, callback) {
+                                    actionHandlers[action] = callback;
+                                    if (window.sysContext && typeof window.sysContext.registerMediaAction === 'function') {
+                                        window.sysContext.registerMediaAction(action, callback ? true : false);
+                                    }
+                                };
+
+                                window.__triggerMediaAction = function(action) {
+                                    var handler = actionHandlers[action];
+                                    if (handler) {
+                                        handler();
+                                    }
+                                };
+                            })();
                         })();
                         """.trimIndent(),
                         null

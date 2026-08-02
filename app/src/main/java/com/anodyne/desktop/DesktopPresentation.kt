@@ -1733,6 +1733,67 @@ class DesktopPresentation(
                                     }
                                 }
                             });
+
+                            // HTML5 Web Notifications API Mock
+                            (function() {
+                                function MockNotification(title, options) {
+                                    this.title = title;
+                                    this.body = options ? (options.body || "") : "";
+                                    if (window.sysContext && typeof window.sysContext.postNotification === 'function') {
+                                        window.sysContext.postNotification(this.title, this.body);
+                                    }
+                                }
+                                MockNotification.permission = "granted";
+                                MockNotification.requestPermission = function(cb) {
+                                    if (cb) cb("granted");
+                                    return Promise.resolve("granted");
+                                };
+                                window.Notification = MockNotification;
+                            })();
+
+                            // HTML5 Media Session API Mock
+                            (function() {
+                                if (!navigator.mediaSession) {
+                                    navigator.mediaSession = {};
+                                }
+                                var metadataVal = null;
+                                var stateVal = "none";
+                                var actionHandlers = {};
+
+                                Object.defineProperty(navigator.mediaSession, 'metadata', {
+                                    get: function() { return metadataVal; },
+                                    set: function(val) {
+                                        metadataVal = val;
+                                        if (val && window.sysContext && typeof window.sysContext.updateMediaMetadata === 'function') {
+                                            window.sysContext.updateMediaMetadata(val.title || "", val.artist || "", val.album || "", val.artwork ? (val.artwork[0] ? val.artwork[0].src : "") : "");
+                                        }
+                                    }
+                                });
+
+                                Object.defineProperty(navigator.mediaSession, 'playbackState', {
+                                    get: function() { return stateVal; },
+                                    set: function(val) {
+                                        stateVal = val;
+                                        if (window.sysContext && typeof window.sysContext.updateMediaState === 'function') {
+                                            window.sysContext.updateMediaState(val);
+                                        }
+                                    }
+                                });
+
+                                navigator.mediaSession.setActionHandler = function(action, callback) {
+                                    actionHandlers[action] = callback;
+                                    if (window.sysContext && typeof window.sysContext.registerMediaAction === 'function') {
+                                        window.sysContext.registerMediaAction(action, callback ? true : false);
+                                    }
+                                };
+
+                                window.__triggerMediaAction = function(action) {
+                                    var handler = actionHandlers[action];
+                                    if (handler) {
+                                        handler();
+                                    }
+                                };
+                            })();
                         })();
                         """.trimIndent(),
                         null

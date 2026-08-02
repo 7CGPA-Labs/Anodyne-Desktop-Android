@@ -212,6 +212,34 @@ class AndroidSysContext(
         (context as? MainActivity)?.clearAllCachedWebData()
     }
 
+    @JavascriptInterface
+    fun postNotification(title: String, body: String) {
+        (context as? MainActivity)?.runOnUiThread {
+            (context as? MainActivity)?.addNotificationFromWeb(title, body)
+        }
+    }
+
+    @JavascriptInterface
+    fun updateMediaMetadata(title: String, artist: String, album: String, artworkUrl: String) {
+        (context as? MainActivity)?.runOnUiThread {
+            (context as? MainActivity)?.updateMediaMetadataFromWeb(title, artist, album, artworkUrl)
+        }
+    }
+
+    @JavascriptInterface
+    fun updateMediaState(state: String) {
+        (context as? MainActivity)?.runOnUiThread {
+            (context as? MainActivity)?.updateMediaStateFromWeb(state)
+        }
+    }
+
+    @JavascriptInterface
+    fun registerMediaAction(action: String, registered: Boolean) {
+        (context as? MainActivity)?.runOnUiThread {
+            (context as? MainActivity)?.registerMediaActionFromWeb(action, registered)
+        }
+    }
+
     companion object {
         private const val TAG = "AndroidSysContext"
     }
